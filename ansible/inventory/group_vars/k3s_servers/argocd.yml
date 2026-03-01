@@ -14,6 +14,7 @@ argocd_rbac_scopes: "[groups]"
 argocd_rbac_policy_csv_lines:
   - "g, team-admins, role:admin"
   - "g, team-developers, role:edit"
+  - "g, team-readers, role:readonly"
   - "p, role:edit, applications, *, argocd/*, allow"
 argocd_rbac_extra_data: {}
 
