@@ -230,12 +230,17 @@ Recommended immediate relabeling:
 
 #### T1.2.2 Deploy PostgreSQL with persistent volume and migration workflow
 - **Description:** Provision Postgres via Helm/manifests and add schema migrations (Alembic recommended).
+- **Status:** DONE (2026-03-02)
 - **Acceptance Criteria:**
   - DB survives pod restart.
   - Migration can run idempotently in CI and cluster.
 - **Dependencies:** T1.2.1
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - In-cluster persistence check passed: inserted marker row into `projects`, restarted `homelab-api-postgres-0`, row remained present.
+  - Argo CD rollout of hardened migration hook succeeded: `homelab-api-dev` reached `Synced | Healthy` with operation state `Succeeded`.
+  - CI migration idempotency check implemented and passing in `apps/portal/.github/workflows/backend-ci.yml` (`python -m alembic upgrade head` executed twice).
 
 #### T1.2.3 Containerize and deploy frontend + backend through GitOps
 - **Description:** Build/deploy both services with environment config and ingress routing.
