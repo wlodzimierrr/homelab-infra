@@ -11,4 +11,4 @@ Architectural decisions are tracked in [`docs/adr`](docs/adr/README.md).
 
 ## GitOps Workloads Repo Skeleton
 
-A starter structure for a dedicated manifests repository exists in [`workloads-repo/`](workloads-repo/README.md).
+A starter structure for a dedicated manifests repository exists in [`workloads/`](workloads/README.md).

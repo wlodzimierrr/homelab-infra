@@ -16,7 +16,7 @@ As the platform grows (observability stack, security tooling, registry integrati
 
 - Which system owns initial provisioning
 - Which system owns steady-state reconciliation
-- Which repository is the source of truth for each layer (including `workloads-repo` for Day-2 app and platform manifests)
+- Which repository is the source of truth for each layer (including `workloads` for Day-2 app and platform manifests)
 
 Without explicit boundaries, there is risk of:
 
