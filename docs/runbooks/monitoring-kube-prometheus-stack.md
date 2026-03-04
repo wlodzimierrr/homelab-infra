@@ -2,6 +2,10 @@
 
 This runbook covers deployment and validation of `kube-prometheus-stack` for T4.1.1 with low retention and bounded storage for homelab capacity.
 
+For T4.1.2 platform dashboard and alert prototypes, use:
+
+- `docs/runbooks/platform-health-dashboard.md`
+
 ## 1. Scope and paths
 
 Argo CD applications:
@@ -31,6 +35,7 @@ Shared settings:
 3. Requests/limits applied to Prometheus, Grafana, operator, and exporters.
 4. AppProject `homelab-monitoring` must allow both `monitoring` and `kube-system` destinations because the chart creates control-plane scrape Service objects in `kube-system`.
 5. Current strategy is one shared monitoring release in namespace `monitoring`; do not deploy the same release into prod app-of-apps without separate namespace/release naming.
+6. Argo CD must use `application.instanceLabelKey: argocd.argoproj.io/instance` in `argocd-cm`; otherwise Argo rewrites `app.kubernetes.io/instance` and can break Helm selectors used by `kube-state-metrics` ServiceMonitor.
 
 ## 3. Deploy and sync
 
@@ -64,6 +69,13 @@ Expected:
 1. Dashboard `Kubernetes / Compute Resources / Cluster` shows cluster CPU/memory.
 2. Dashboard `Kubernetes / Compute Resources / Node (Pods)` shows node-level metrics.
 3. Dashboard `Kubernetes / Compute Resources / Pod` shows pod-level CPU/memory.
+
+Verify kube-state-metrics scrape is up:
+
+```bash
+kubectl -n monitoring exec prometheus-kube-prometheus-stack-prometheus-0 -c prometheus -- \
+  wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=up{job="kube-state-metrics"}'
+```
 
 ## 5. Validate retention and storage usage
 

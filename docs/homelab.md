@@ -794,15 +794,27 @@ Recommended immediate relabeling:
   - Retention/storage profile configured in manifests:
     - Shared stack: `24h`, `retentionSize: 3GiB`, Prometheus PVC `5Gi`
   - Runbook with validation and storage checks added at `docs/runbooks/monitoring-kube-prometheus-stack.md`.
+  - Stabilized Argo hook behavior for API migrations by setting `argocd.argoproj.io/hook-delete-policy: BeforeHookCreation` in `workloads/apps/homelab-api/base/migration-job.yaml` to avoid stale "Syncing" operation states when hook jobs are removed too early.
 
 #### T4.1.2 Build platform health dashboard
 - **Description:** Create dashboards for app availability, deployment status, and error rates.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Single dashboard shows API health, DB up status, frontend reachability.
   - Alert threshold prototypes configured.
 - **Dependencies:** T4.1.1, T1.2.3
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Single dashboard `Homelab Platform Health` provisioned via `grafana.dashboards.default` in `workloads/environments/dev/workloads/monitoring-app.yaml`.
+  - Dashboard panels include API availability ratio, frontend availability ratio, DB ready replicas, deployment ready vs desired, and prototype API 5xx rate panel.
+  - Prototype Prometheus alert thresholds configured via `additionalPrometheusRulesMap` in `workloads/environments/dev/workloads/monitoring-app.yaml`:
+    - `HomelabApiUnavailable`
+    - `HomelabWebUnavailable`
+    - `HomelabPostgresUnavailable`
+    - `HomelabApiRestartSpike`
+    - `HomelabApi5xxRateHighPrototype`
+  - Validation runbook added at `docs/runbooks/platform-health-dashboard.md`.
 
 ### E4.2 Centralized logging
 
@@ -824,16 +836,127 @@ Recommended immediate relabeling:
 - **Complexity:** S
 - **Risk:** Low
 
-### E4.3 Deployment and change visibility
+### E4.3 Portal Monitoring & Observability UX
 
 #### T4.3.1 Build release dashboard (commits → image tags → Argo sync)
 - **Description:** Surface end-to-end delivery state for confidence and debugging.
+- **Status:** TODO
 - **Acceptance Criteria:**
   - Dashboard links commit SHA to deployed image and sync status.
   - Drift detection visible.
 - **Dependencies:** T2.2.2, T4.1.1
 - **Complexity:** L
 - **Risk:** Medium
+
+#### T4.3.2 Service metrics summary cards on service detail page
+- **Description:** Add summary cards to each service page for uptime %, p95 latency, error rate, and restart count, using existing service identity metadata.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Service detail page shows four metric cards with current values and last refresh timestamp.
+  - Card states include healthy/warning/critical thresholds and match shared status styling.
+  - Missing metric data renders an explicit "No data" state without breaking layout.
+- **Dependencies:** T1.6.2, T1.6.3, T4.1.2
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.3.3 Shared uptime indicator widget and status mapping
+- **Description:** Implement a reusable uptime indicator component (24h and 7d) with threshold-to-severity mapping for consistent status presentation across pages.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Shared widget component is available in the frontend component library and reused in at least two screens.
+  - Threshold mapping is centrally configurable and unit-tested.
+  - Widget supports loading, stale-data, and no-data states.
+- **Dependencies:** T1.6.3, T4.3.2
+- **Complexity:** S
+- **Risk:** Low
+
+#### T4.3.4 Embedded Grafana panels for latency and error trends
+- **Description:** Embed selected Grafana panels inside service detail pages for response time and error-rate trends, with a fallback deep link when embedding is unavailable.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Service detail page renders at least two embedded panels (latency, errors) for the selected service.
+  - "Open in Grafana" action preserves service and time-range context.
+  - Failed embed renders a non-blocking fallback state with a working deep link.
+- **Dependencies:** T1.6.2, T1.6.6, T4.1.2
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.3.5 Template-driven monitoring URL builder (Grafana + Loki)
+- **Description:** Extend frontend URL templating so monitoring links can inject variables (service, namespace, environment, range) without hardcoded page-specific logic.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - URL template helper supports variable interpolation for Grafana and Loki routes.
+  - Service detail and logs entry points use shared template helper.
+  - Invalid or missing template variables produce safe fallback links and console warnings in development mode.
+- **Dependencies:** T1.6.5, T1.6.6
+- **Complexity:** S
+- **Risk:** Low
+
+#### T4.3.6 Service health timeline (status-over-time)
+- **Description:** Add a compact timeline view on the service page to visualize health transitions (healthy, degraded, down) over time.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Timeline shows status segments for a selectable window (default 24h).
+  - Hover/click on a segment shows timestamp and status reason metadata when available.
+  - Timeline component is responsive and remains legible on mobile widths.
+- **Dependencies:** T1.6.2, T1.6.3, T4.3.3
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.3.7 Deployment observability overlay on deployment history
+- **Description:** Enrich deployment history rows with post-deploy metric snapshots (error-rate delta, latency delta, availability impact) to speed regression detection.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Deployment history rows include before/after indicators for at least error rate and latency.
+  - Rows with missing comparison windows display explicit unavailable state.
+  - Sorting/filtering can prioritize deployments with negative health deltas.
+- **Dependencies:** T1.6.4, T4.1.2, T4.3.2
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.3.8 Unhealthy deployment and degraded service highlighting
+- **Description:** Add frontend detection rules to flag suspicious deployments and propagate degraded badges to service list and detail views.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Rule set identifies unhealthy deployments using configurable thresholds (for example error spike or readiness drop).
+  - Service list and service detail views show consistent degraded badge treatment.
+  - Alerting logic is isolated in a test-covered adapter/helper module.
+- **Dependencies:** T1.6.1, T1.6.3, T1.6.4, T4.3.7
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.3.9 Logs quick-view panel on service detail
+- **Description:** Add a service-level logs quick-view drawer with prebuilt Loki queries and one-click deep links for full investigation in Grafana.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Service detail page includes "View logs" action that opens an inline quick-view panel.
+  - Panel provides at least three prebuilt query shortcuts (errors, restarts, recent warnings) scoped to service label/namespace.
+  - "Open full logs" deep link launches Grafana/Loki with equivalent query context.
+- **Dependencies:** T1.6.2, T1.6.5, T4.2.1, T4.3.5
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.3.10 Platform health page in portal UI
+- **Description:** Create a dedicated portal page aggregating platform-wide service health, alert counts, and top active incidents from monitoring adapters.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - New route displays platform summary cards, unhealthy services list, and latest alert feed.
+  - Page links back to service detail pages and external Grafana dashboards.
+  - Loading and partial-failure states keep page usable when one data source fails.
+- **Dependencies:** T1.6.3, T4.1.2, T4.3.8
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.3.11 Global incident banner and alert badges
+- **Description:** Add an app-wide incident banner and per-service alert badges driven by active monitoring severity states.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Global banner appears on all main portal routes when active incidents exceed configured severity.
+  - Service cards/rows show alert count badges with severity color mapping.
+  - Banner can be dismissed per session while preserving visibility of critical incidents.
+- **Dependencies:** T1.6.1, T1.6.3, T4.3.10
+- **Complexity:** S
+- **Risk:** Low
 
 ---
 

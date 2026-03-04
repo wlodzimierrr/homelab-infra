@@ -42,7 +42,13 @@ Repeat per environment and for other app secrets.
 
 ## 5. Wire encrypted secrets into overlays
 
-`bootstrap-sops-postgres-secret.sh` auto-adds `postgres-secret.enc.yaml` to overlay `resources:` if missing.
+Only do this after Argo CD decryption integration is configured.
+
+Current homelab state:
+
+1. Argo CD is not configured with SOPS decryption plugin yet.
+2. Do **not** include `postgres-secret.enc.yaml` in overlay `resources`, or pods will receive literal `ENC[...]` values.
+3. Keep encrypted files in Git for source-of-truth and decrypt/apply at runtime from operator workflow.
 
 ## 6. Validate guardrails
 
@@ -61,11 +67,11 @@ Local check:
 sops --decrypt workloads/apps/homelab-api/envs/dev/postgres-secret.enc.yaml >/dev/null
 ```
 
-Cluster check (using local decryption in pipeline step):
+Cluster check (using local decryption in operator or pipeline step):
 
 ```bash
 sops --decrypt workloads/apps/homelab-api/envs/dev/postgres-secret.enc.yaml | kubectl apply --dry-run=server -f -
-kubectl apply -k workloads/apps/homelab-api/envs/dev
+sops --decrypt workloads/apps/homelab-api/envs/dev/postgres-secret.enc.yaml | kubectl apply -f -
 ```
 
 ## 8. Acceptance evidence for T3.3.1
