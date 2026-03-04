@@ -778,12 +778,22 @@ Recommended immediate relabeling:
 
 #### T4.1.1 Deploy kube-prometheus-stack with minimal retention
 - **Description:** Install Prometheus/Grafana tuned for homelab resource limits.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Cluster/node/pod metrics visible.
   - Retention and storage usage documented.
 - **Dependencies:** T1.1.1
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Argo CD app added for shared cluster monitoring:
+    - `workloads/environments/dev/workloads/monitoring-app.yaml`
+  - `monitoring-prod` app intentionally removed to avoid shared-resource conflicts from deploying the same Helm release into the same namespace from two Argo CD applications.
+  - Single-cluster safety guardrail added: `workloads/environments/prod/workloads/kustomization.yaml` is intentionally empty and prod workload app manifests were removed to prevent accidental recreation of `homelab-api-prod`/`homelab-web-prod` in the same cluster.
+  - Monitoring AppProject boundary added in `workloads/bootstrap/project-homelab.yaml` (`homelab-monitoring`, destinations `monitoring` and `kube-system` for control-plane scrape Services).
+  - Retention/storage profile configured in manifests:
+    - Shared stack: `24h`, `retentionSize: 3GiB`, Prometheus PVC `5Gi`
+  - Runbook with validation and storage checks added at `docs/runbooks/monitoring-kube-prometheus-stack.md`.
 
 #### T4.1.2 Build platform health dashboard
 - **Description:** Create dashboards for app availability, deployment status, and error rates.
