@@ -164,6 +164,8 @@ Recommended immediate relabeling:
 - **Evidence:**
   - `0001-k3s-ha-cluster-topology.md`, `0002-argocd-gitops-model.md`, and `0003-secrets-management-strategy-placeholder.md` committed.
 
+---
+
 ### E0.2 GitOps repository topology and standards
 
 #### T0.2.1 Create dedicated workloads repo skeleton
@@ -191,6 +193,8 @@ Recommended immediate relabeling:
 - **Evidence:**
   - Base + overlay pattern implemented for `homelab-api` and `homelab-web`.
   - Promotion path documented in `workloads/README.md`.
+
+---
 
 ### E0.3 Cluster baseline hardening
 
@@ -249,6 +253,8 @@ Recommended immediate relabeling:
 - **Evidence:**
   - Argo CD hardening automation/configuration applied in cluster bootstrap workflow.
   - Repository status normalization and operational validations recorded this control as complete.
+
+---
 
 ### E1.2 Homelab app MVP (React + FastAPI + Postgres)
 
@@ -331,6 +337,8 @@ Recommended immediate relabeling:
   - Portal ingress split into UI (`/`) with basic-auth middleware and API (`/api`) without middleware to avoid `Authorization` header conflicts between ingress basic-auth and backend bearer JWT.
   - Secret bootstrap and break-glass disable/restore procedure documented in `workloads/README.md`.
   - Runtime validation completed after sync: portal access required basic-auth, backend login succeeded, and project refresh returned `Loaded 2 project(s)` with expected records (`proj-browser`, `proj-web`).
+
+---
 
 ### E1.4 Portal Frontend v1
 
@@ -415,6 +423,8 @@ Recommended immediate relabeling:
   - SPA fallback confirmed in nginx config via `try_files $uri /index.html` (`apps/portal/frontend/nginx.conf`).
   - Runtime port updated to `80` (`listen 80`, `EXPOSE 80`) and workload container port aligned to 80 in `workloads/apps/homelab-web/base/deployment.yaml`.
 
+---
+
 ### E1.6 Portal Product Features (Render-like UX, read-only first)
 
 #### T1.6.1 Services list page
@@ -437,6 +447,7 @@ Recommended immediate relabeling:
 
 #### T1.6.2 Service detail page (overview)
 - **Description:** Implement `/services/:serviceId` with Overview tab showing status cards: deployed version, sync/health state, links to Argo app, Grafana dashboard, and Logs. Endpoints list and a preview of recent deployments (top 5).
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - Overview tab shows version tag, health/sync indicators (use placeholders if backend not providing yet).
   - Links open external Argo/Grafana/Loki pages using templates from `config.ts`.
@@ -445,9 +456,15 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.6.1, T1.4.4
 - **Complexity:** L
 - **Risk:** Medium
+- **Evidence:**
+  - Service detail Overview implemented for `/services/:serviceId` in `apps/portal/frontend/src/pages/service-details-page.tsx` with deployed version, sync/health indicators, endpoints, and recent deployments preview.
+  - Overview data loads backend-first (`getService`, `getServiceDeployments`) with project-derived and mocked fallbacks when fields are missing.
+  - External links are generated via `apps/portal/frontend/src/lib/config.ts` helpers (`buildArgoAppUrl`, `buildGrafanaDashboardUrl`, `buildLogsUrl`).
+  - Recent deployments preview is capped to top 5 with fallback entries when backend data is unavailable.
 
 #### T1.6.3 Service status view (health + sync)
 - **Description:** Create reusable status components that display health and sync status with clear color semantics. Allow placeholder/mocked values until backend supplies real data.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - `StatusCard` component accepts `health` and `sync` props and renders consistent UI.
   - Placeholder state when data is missing with CTA text like "Status unavailable — backend integration pending".
@@ -455,9 +472,14 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.6.2
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - Reusable `StatusCard` added in `apps/portal/frontend/src/components/status-card.tsx` with `health`/`sync` props and consistent status color semantics.
+  - Placeholder copy is shown when both status values are unknown: "Status unavailable - backend integration pending".
+  - Visual checks for Healthy/Degraded/Unknown added on the service detail page in dev mode.
 
 #### T1.6.4 Deployment history page (read-only, mocked adapter)
 - **Description:** `/services/:serviceId/deployments` lists last N deployments (timestamp, version/tag, outcome). Use a mocked data adapter that can be replaced by a backend adapter later.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - Deployments page lists at least the 10 most recent entries (mocked if backend absent).
   - Data adapter implementation is isolated behind a single module `src/lib/adapters/deployments.ts` and documented TODO for swap.
@@ -465,9 +487,14 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.4.4, T1.6.2
 - **Complexity:** M
 - **Risk:** Low
+- **Evidence:**
+  - Deployment history page implemented in `apps/portal/frontend/src/pages/service-deployments-page.tsx` with read-only table, loading, empty, and error states.
+  - Adapter isolated to `apps/portal/frontend/src/lib/adapters/deployments.ts` (`getDeploymentHistory`) with backend-first fetch and mocked fallback.
+  - Adapter guarantees at least 10 entries when backend data is absent and includes a TODO note for backend adapter swap.
 
 #### T1.6.5 Logs access (deep links to Grafana/Loki)
 - **Description:** Provide a control that opens external Grafana/Loki with prefilled query parameters to filter by service label/namespace. Base URL and template strings come from `config.ts`.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - Logs button opens a new tab to configured Grafana/Loki URL with query parameters populated for the selected service.
   - Template supports variables like `{{namespace}}`, `{{app_label}}`, and `{{time_range}}`.
@@ -475,18 +502,28 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.4.4, infra (Grafana/Loki URLs)
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - Logs action on service detail overview now opens external Grafana/Loki in a new tab with populated service filters.
+  - `apps/portal/frontend/src/lib/config.ts` template handling supports both `{var}` and `{{var}}`, including `{{namespace}}`, `{{app_label}}`, and `{{time_range}}`.
+  - Logs availability is guarded by config (`isLogsConfigured()`), and the button is disabled when external URL/template are not configured.
 
 #### T1.6.6 External links config (Argo CD, Grafana)
 - **Description:** Add `src/lib/config.ts` entries and README instructions for configuring Argo CD and Grafana base URLs in environment variables; support in-cluster `VITE_API_BASE_URL=/api` and local dev `VITE_API_BASE_URL=http://localhost:8000/api`.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - `config.ts` reads `VITE_ARGO_BASE_URL` and `VITE_GRAFANA_BASE_URL` with sensible defaults (empty).
   - README documents how to configure these env vars for local dev and in-cluster values.
 - **Dependencies:** T1.4.4
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - External URL config defaults updated in `apps/portal/frontend/src/lib/config.ts` so `VITE_ARGO_BASE_URL` and `VITE_GRAFANA_BASE_URL` default to empty values.
+  - `apps/portal/frontend/README.md` now documents runtime env configuration with explicit examples for local dev (`VITE_API_BASE_URL=http://localhost:8000/api`) and in-cluster (`VITE_API_BASE_URL=/api`).
+  - README also documents related external link template vars used by Argo/Grafana/Logs links.
 
 #### T1.6.7 Service registry model: static-config MVP vs DB-backed decision
 - **Description:** Decide the simplest approach for service metadata: either add a lightweight DB model in backend or use a static YAML/JSON config stored in the repo for MVP. Implement the chosen MVP path.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - Decision recorded in ticket with rationale and follow-up migration plan.
   - If static-config chosen: example `apps/portal/frontend/services.sample.json` included and used by the frontend adapter as fallback.
@@ -494,24 +531,48 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.2.1 (backend), T1.4.4
 - **Complexity:** S
 - **Risk:** Medium
+- **Decision:** Static-config MVP selected.
+- **Rationale:**
+  - Lowest implementation/ops overhead for homelab phase while backend service catalog contracts are still evolving.
+  - Keeps registry data auditable in Git and avoids introducing schema/migration work for a non-critical read-only surface.
+  - Allows frontend progress even when `/projects` data is unavailable or incomplete.
+- **Follow-up Migration Plan:**
+  - Introduce backend-owned `/api/services` contract with explicit service metadata fields (owner, repo, envs, URLs, labels).
+  - Add backend persistence (DB model + migration) only after metadata ownership and write workflows are finalized.
+  - Switch frontend services adapter from static fallback to backend adapter, then deprecate `services.sample.json`.
+- **Evidence:**
+  - Added static sample registry `apps/portal/frontend/services.sample.json`.
+  - Added frontend services adapter `apps/portal/frontend/src/lib/adapters/services.ts` with API-first load and static JSON fallback.
+  - Wired services page to the adapter (`apps/portal/frontend/src/pages/services-page.tsx`), so fallback is used when API data is absent/unavailable.
 
 #### T1.6.8 UX polish and shared components
 - **Description:** Implement consistent loading, empty, and error components, Sonner toasts, and reuse shadcn Card/Table/Tabs/Dialog components across pages. Make layout responsive.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - Shared `components/` directory with `Loading`, `Empty`, `Error`, and `Toast` wrappers.
   - All major pages use consistent components and are responsive on small screens.
 - **Dependencies:** T1.4.1
 - **Complexity:** M
 - **Risk:** Low
+- **Evidence:**
+  - Shared wrappers added in `apps/portal/frontend/src/components/`: `loading-state.tsx`, `empty-state.tsx`, `error-state.tsx`, and `toast-message.tsx`.
+  - Major pages now use shared state wrappers for consistent UX: `projects-page.tsx`, `services-page.tsx`, `service-details-page.tsx`, `service-deployments-page.tsx`, and `login-page.tsx`.
+  - App-level unauthorized notifications and project create notifications now flow through the shared toast wrapper (`apps/portal/frontend/src/App.tsx`, `projects-page.tsx`).
 
 #### T1.6.9 Frontend README and run instructions
 - **Description:** Document local dev, env vars, Docker build/run, and note that deploy/logs are read-only and may be mocked until backend integration is complete.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - `apps/portal/frontend/README.md` with: install, dev start, build, docker build/run, env vars list, and note about read-only behavior.
   - Commands validated locally (where possible) and documented.
 - **Dependencies:** T1.4.1, T1.4.5
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - `apps/portal/frontend/README.md` now includes install/dev/build flow, runtime env vars list, and local/in-cluster examples.
+  - Docker build/run instructions are documented with direct commands (`docker build`, `docker run`) plus the existing publish helper script.
+  - README explicitly notes read-only behavior and mocked/placeholder integration boundaries for deploy/logs/status metadata.
+  - Command-validation section added with runnable commands and environment caveat for unsupported shells (for example WSL1).
 
 #### Anti-scope / NOT included in this iteration
 - No deploy buttons or any write/deploy actions (no PR generation, no kubectl apply from UI).
@@ -523,52 +584,85 @@ Recommended immediate relabeling:
 
 #### T2.1.1 Build/test/publish backend and frontend images in CI
 - **Description:** Add pipeline stages for lint/test/build/publish to GHCR or Harbor.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - Every main branch merge publishes immutable image tags.
   - Failed tests block publish.
 - **Dependencies:** T1.2.3
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Added workflow `apps/portal/.github/workflows/portal-images.yml` with stages/jobs for `lint`, `test`, `build-images`, and `publish-images`.
+  - `publish-images` is gated on successful `lint`/`test`/`build-images` and runs only on `push` to `main`.
+  - Backend and frontend images are published to GHCR with immutable SHA tags:
+    - `ghcr.io/wlodzimierrr/homelab-api:sha-<commit>`
+    - `ghcr.io/wlodzimierrr/homelab-web:sha-<commit>`
 
 #### T2.1.2 Attach SBOM/provenance metadata to images
 - **Description:** Generate SBOM and store build provenance to improve auditability.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - CI artifact contains SBOM for each image.
   - Build metadata traceable to commit SHA.
 - **Dependencies:** T2.1.1
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - `apps/portal/.github/workflows/portal-images.yml` now generates SPDX SBOMs per image (`backend`, `frontend`) via `anchore/sbom-action` and uploads them as CI artifacts with `actions/upload-artifact`.
+  - Publish step now attaches provenance and SBOM attestations to pushed images (`provenance: mode=max`, `sbom: true`) via `docker/build-push-action`.
+  - Published image tags and OCI metadata remain commit-SHA traceable (for example `sha-<commit>` tags and `org.opencontainers.image.revision`).
 
 ### E2.2 Automated image tag promotion for GitOps
 
 #### T2.2.1 Implement auto-update controller (Argo CD Image Updater or equivalent)
 - **Description:** Wire automated updates of image tags in GitOps manifests for dev.
+- **Status:** DONE (2026-03-03)
 - **Acceptance Criteria:**
   - New dev image tag triggers Git commit/PR automatically.
   - Sync applies without manual tag edits.
 - **Dependencies:** T2.1.1, T0.2.2
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - `apps/portal/.github/workflows/portal-images.yml` now includes `promote-dev-gitops` job, triggered after successful `publish-images` on `main`.
+  - The job checks out GitOps repo `wlodzimierrr/homelab-workloads`, updates only dev overlay tag files:
+    - `apps/homelab-api/envs/dev/patch-deployment.yaml`
+    - `apps/homelab-api/envs/dev/patch-migration-job.yaml`
+    - `apps/homelab-web/envs/dev/patch-deployment.yaml`
+  - Changes are committed as an automated PR via `peter-evans/create-pull-request` (`automation/dev-image-bump-<sha>`), satisfying commit/PR automation for new image tags.
+  - Existing Argo CD dev Applications are already configured with `syncPolicy.automated` (`prune: true`, `selfHeal: true`), so merged tag updates apply without manual tag edits.
 
 #### T2.2.2 Introduce gated promotion to staging/prod
 - **Description:** Require manual approval or policy checks before higher env promotion.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Promotion pipeline supports approve/reject checkpoint.
   - Rollback procedure tested once.
 - **Dependencies:** T2.2.1
 - **Complexity:** L
 - **Risk:** High
+- **Evidence:**
+  - `apps/portal/.github/workflows/gated-promotion.yml` adds a `workflow_dispatch` promotion pipeline for `staging`/`prod` with `action_mode` of `promote` or `rollback`.
+  - Pipeline includes policy checks before the gate: target overlay file existence, strict tag format (`sha-<40 hex>`), and GHCR image tag existence via `docker manifest inspect`.
+  - Manual approve/reject checkpoint is enforced via `approval-gate` job bound to protected environment `homelab-<target>-promotion`; rejection blocks PR creation.
+  - Post-approval step creates a constrained PR in `wlodzimierrr/homelab-workloads` updating only target env image patch files for `homelab-api` and `homelab-web`.
+  - Rollback rehearsal executed once locally on 2026-03-04T07:47:58Z: simulated `N -> N+1 -> N` image updates on temp manifests and confirmed all target files returned to rollback tag.
 
 ### E2.3 Registry and provenance basics
 
 #### T2.3.1 Select and configure primary registry (GHCR default)
 - **Description:** Standardize on one registry and auth pattern for cluster pulls.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Pull secrets configured and rotated procedure documented.
   - Registry retention policy defined.
 - **Dependencies:** T2.1.1
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - `workloads/README.md` now defines the GHCR auth standard (`ghcr.io`, `ghcr-pull-secret`, namespace/service-account bindings) for cluster image pulls.
+  - Pull secret rotation workflow is documented with executable commands for `homelab-api` and `homelab-web`, plus rollout validation commands and 90-day rotation cadence.
+  - Registry retention policy is explicitly defined for both GHCR packages (`homelab-api`, `homelab-web`): keep release/semver tags, retain associated provenance, and prune old `sha-*` tags to the latest 60 on a monthly schedule.
 
 ---
 
@@ -576,21 +670,36 @@ Recommended immediate relabeling:
 
 #### T3.1.1 Define Argo CD project-level RBAC boundaries
 - **Description:** Restrict source repos, destinations, and namespaces by project.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - App projects cannot deploy outside assigned namespaces.
   - Unauthorized repo path usage denied.
 - **Dependencies:** T1.1.2
 - **Complexity:** M
 - **Risk:** High
+- **Evidence:**
+  - `workloads/bootstrap/project-homelab.yaml` now defines scoped `AppProject` objects (`homelab-bootstrap`, `homelab-platform`, `homelab-api`, `homelab-web`) with explicit destination namespace restrictions per project.
+  - Each `AppProject` now restricts `sourceRepos` to the dedicated workloads repository URL (`https://github.com/wlodzimierrr/homelab-workloads.git`), replacing the former wildcard allow-list.
+  - Environment application manifests are remapped to scoped projects:
+    - bootstrap/root + workloads parent apps -> `homelab-bootstrap`
+    - platform apps -> `homelab-platform`
+    - homelab-api apps -> `homelab-api`
+    - homelab-web apps -> `homelab-web`
+  - This enforces Argo CD project-level deny behavior for out-of-scope destinations and non-allowed repository sources.
 
 #### T3.1.2 Audit and tighten Kubernetes service account permissions
 - **Description:** Review all platform service accounts and reduce wildcards.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - No cluster-admin bindings for app workloads.
   - RBAC audit report committed.
 - **Dependencies:** T0.3.2
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - `workloads/audit/rbac-audit-2026-03-04.md` added as the committed RBAC audit report, with scope, commands, findings, and conclusion.
+  - Audit confirms app workload RBAC is namespace-scoped only (`Role` + `RoleBinding` in `homelab-api`) and includes no `ClusterRoleBinding` or `cluster-admin` references.
+  - `workloads/scripts/check-rbac-guardrails.sh` added to enforce guardrails against wildcard RBAC tokens and disallowed cluster-admin style bindings in `apps/**`.
 
 ### E3.2 External auth integration
 
