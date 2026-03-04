@@ -820,21 +820,50 @@ Recommended immediate relabeling:
 
 #### T4.2.1 Deploy Loki + Promtail and collect workload logs
 - **Description:** Centralize logs with low-ops stack; defer ELK unless scale demands.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Logs searchable by namespace/app/container.
   - Basic retention policy active.
 - **Dependencies:** T1.2.3
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Argo CD apps added:
+    - `workloads/environments/dev/workloads/loki-app.yaml`
+    - `workloads/environments/dev/workloads/promtail-app.yaml`
+  - Dev workloads kustomization now includes logging apps:
+    - `workloads/environments/dev/workloads/kustomization.yaml`
+  - Monitoring AppProject extended to allow Grafana Helm repo source:
+    - `workloads/bootstrap/project-homelab.yaml`
+  - Grafana provisioning includes Loki datasource (`uid: loki`) for Explore queries:
+    - `workloads/environments/dev/workloads/monitoring-app.yaml`
+  - Loki retention configured to `168h` with compactor retention enabled in single-binary mode:
+    - `workloads/environments/dev/workloads/loki-app.yaml`
+  - Promtail relabeling includes `app` label (with pod-name fallback) so logs are queryable by namespace/app/container:
+    - `workloads/environments/dev/workloads/promtail-app.yaml`
+  - Validation runbook added:
+    - `docs/runbooks/logging-loki-promtail.md`
 
 #### T4.2.2 Add log-to-triage workflow documentation
 - **Description:** Define how to correlate logs with deployments and incidents.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Runbook includes at least 3 common failure scenarios.
   - Time-to-diagnose baseline measured once.
 - **Dependencies:** T4.2.1
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - Log-to-triage workflow runbook added:
+    - `docs/runbooks/log-to-triage-workflow.md`
+  - Runbook includes standardized correlation workflow across Loki, Argo CD sync status, and Kubernetes rollout signals.
+  - Runbook documents 3 common failure scenarios:
+    - Promtail push failures during Loki startup
+    - Missing/sparse service logs after deployment due to stale query filters/time windows
+    - Authentication/dependency failures (for example API/Postgres credential mismatch)
+  - Time-to-diagnose baseline measured once and recorded:
+    - Drill date `2026-03-04`
+    - Measured TTD `14 minutes` for first-run ingestion incident pattern.
 
 ### E4.3 Portal Monitoring & Observability UX
 

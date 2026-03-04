@@ -58,7 +58,27 @@ Confirm core monitoring pods:
 kubectl -n monitoring get pods
 ```
 
-Port-forward Grafana and open dashboards:
+Access Grafana via ingress:
+
+```bash
+kubectl -n monitoring get ingress kube-prometheus-stack-grafana
+```
+
+Expected host: `monitoring.homelab.local`
+
+If local DNS is not configured yet, add a temporary host entry on your workstation:
+
+```bash
+echo "<TRAEFIK_LB_IP> monitoring.homelab.local" | sudo tee -a /etc/hosts
+```
+
+Then open:
+
+```text
+http://monitoring.homelab.local
+```
+
+Fallback (if ingress is unavailable): port-forward Grafana and open dashboards:
 
 ```bash
 kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
