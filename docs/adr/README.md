@@ -16,3 +16,4 @@ This folder stores Architecture Decision Records (ADRs) for the homelab.
 - [0003: Secrets management strategy placeholder](0003-secrets-management-strategy-placeholder.md)
 - [0004: Manifest layering strategy (Kustomize overlays over Helm values)](0004-manifest-layering-kustomize-over-helm-values.md)
 - [0005: Day-0 vs Day-2 Ownership Model](0005-day-0-vs-day-2-ownership-model.md)
+- [0006: OAuth provider vs Cloudflare Zero Trust](0006-oauth-vs-cloudflare-zero-trust.md)

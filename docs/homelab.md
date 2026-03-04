@@ -705,21 +705,34 @@ Recommended immediate relabeling:
 
 #### T3.2.1 Decide OAuth provider vs Cloudflare Zero Trust
 - **Description:** Evaluate operational burden, identity source, and ingress integration.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Decision ADR accepted.
   - Integration plan includes fallback access method.
 - **Dependencies:** T1.3.2
 - **Complexity:** S
 - **Risk:** Medium
+- **Evidence:**
+  - ADR drafted at `docs/adr/0006-oauth-vs-cloudflare-zero-trust.md` with `status: Accepted` and decision rationale.
+  - Integration plan includes explicit fallback/break-glass access methods (WireGuard emergency access, short-lived basic-auth toggle, admin recovery token rotation).
 
 #### T3.2.2 Implement chosen SSO integration for Argo CD and app ingress
 - **Description:** Replace interim auth with centralized identity control.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - User/group claims map to Argo CD and app roles.
   - Local admin bypass disabled except break-glass.
 - **Dependencies:** T3.2.1
 - **Complexity:** L
 - **Risk:** High
+- **Evidence:**
+  - Argo CD OIDC + RBAC config committed in `workloads/bootstrap/argocd-oidc.yaml` with group scopes/role mappings and `admin.enabled: "false"`.
+  - Portal SSO ingress path implemented in dev overlay via `oauth2-proxy`, Traefik forward-auth/error middlewares, ingress patches, and oauth2-proxy NetworkPolicies under `workloads/apps/homelab-web/envs/dev/`.
+  - App role enforcement implemented for forwarded identity/group claims in `apps/portal/backend/app/main.py` (`X-Auth-Request-User` and `X-Auth-Request-Groups` with admin gate for write actions).
+  - Break-glass and validation runbooks documented in `docs/runbooks/oidc-setup.md` and `docs/runbooks/sso-break-glass.md`.
+  - Cluster validation executed with server-side dry runs:
+    - `kubectl apply --dry-run=server -f workloads/bootstrap/argocd-oidc.yaml`
+    - `kubectl apply --dry-run=server -k workloads/apps/homelab-web/envs/dev`
 
 ### E3.3 Secrets encryption and rotation workflow
 
