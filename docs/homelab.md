@@ -634,23 +634,35 @@ Recommended immediate relabeling:
 
 #### T2.2.2 Introduce gated promotion to staging/prod
 - **Description:** Require manual approval or policy checks before higher env promotion.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Promotion pipeline supports approve/reject checkpoint.
   - Rollback procedure tested once.
 - **Dependencies:** T2.2.1
 - **Complexity:** L
 - **Risk:** High
+- **Evidence:**
+  - `apps/portal/.github/workflows/gated-promotion.yml` adds a `workflow_dispatch` promotion pipeline for `staging`/`prod` with `action_mode` of `promote` or `rollback`.
+  - Pipeline includes policy checks before the gate: target overlay file existence, strict tag format (`sha-<40 hex>`), and GHCR image tag existence via `docker manifest inspect`.
+  - Manual approve/reject checkpoint is enforced via `approval-gate` job bound to protected environment `homelab-<target>-promotion`; rejection blocks PR creation.
+  - Post-approval step creates a constrained PR in `wlodzimierrr/homelab-workloads` updating only target env image patch files for `homelab-api` and `homelab-web`.
+  - Rollback rehearsal executed once locally on 2026-03-04T07:47:58Z: simulated `N -> N+1 -> N` image updates on temp manifests and confirmed all target files returned to rollback tag.
 
 ### E2.3 Registry and provenance basics
 
 #### T2.3.1 Select and configure primary registry (GHCR default)
 - **Description:** Standardize on one registry and auth pattern for cluster pulls.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Pull secrets configured and rotated procedure documented.
   - Registry retention policy defined.
 - **Dependencies:** T2.1.1
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - `workloads/README.md` now defines the GHCR auth standard (`ghcr.io`, `ghcr-pull-secret`, namespace/service-account bindings) for cluster image pulls.
+  - Pull secret rotation workflow is documented with executable commands for `homelab-api` and `homelab-web`, plus rollout validation commands and 90-day rotation cadence.
+  - Registry retention policy is explicitly defined for both GHCR packages (`homelab-api`, `homelab-web`): keep release/semver tags, retain associated provenance, and prune old `sha-*` tags to the latest 60 on a monthly schedule.
 
 ---
 
@@ -658,21 +670,36 @@ Recommended immediate relabeling:
 
 #### T3.1.1 Define Argo CD project-level RBAC boundaries
 - **Description:** Restrict source repos, destinations, and namespaces by project.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - App projects cannot deploy outside assigned namespaces.
   - Unauthorized repo path usage denied.
 - **Dependencies:** T1.1.2
 - **Complexity:** M
 - **Risk:** High
+- **Evidence:**
+  - `workloads/bootstrap/project-homelab.yaml` now defines scoped `AppProject` objects (`homelab-bootstrap`, `homelab-platform`, `homelab-api`, `homelab-web`) with explicit destination namespace restrictions per project.
+  - Each `AppProject` now restricts `sourceRepos` to the dedicated workloads repository URL (`https://github.com/wlodzimierrr/homelab-workloads.git`), replacing the former wildcard allow-list.
+  - Environment application manifests are remapped to scoped projects:
+    - bootstrap/root + workloads parent apps -> `homelab-bootstrap`
+    - platform apps -> `homelab-platform`
+    - homelab-api apps -> `homelab-api`
+    - homelab-web apps -> `homelab-web`
+  - This enforces Argo CD project-level deny behavior for out-of-scope destinations and non-allowed repository sources.
 
 #### T3.1.2 Audit and tighten Kubernetes service account permissions
 - **Description:** Review all platform service accounts and reduce wildcards.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - No cluster-admin bindings for app workloads.
   - RBAC audit report committed.
 - **Dependencies:** T0.3.2
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - `workloads/audit/rbac-audit-2026-03-04.md` added as the committed RBAC audit report, with scope, commands, findings, and conclusion.
+  - Audit confirms app workload RBAC is namespace-scoped only (`Role` + `RoleBinding` in `homelab-api`) and includes no `ClusterRoleBinding` or `cluster-admin` references.
+  - `workloads/scripts/check-rbac-guardrails.sh` added to enforce guardrails against wildcard RBAC tokens and disallowed cluster-admin style bindings in `apps/**`.
 
 ### E3.2 External auth integration
 
