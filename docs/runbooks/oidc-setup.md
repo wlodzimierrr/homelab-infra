@@ -6,7 +6,7 @@ This runbook configures centralized SSO for both Argo CD and Portal ingress.
 
 Create two GitHub OAuth apps:
 
-1. Argo CD app callback: `https://argocd.dev.homelab.local/api/dex/callback`
+1. Argo CD app callback: `https://argocd.wlodzimierrr.co.uk/api/dex/callback`
 2. Portal app callback: `http://portal.dev.homelab.local/oauth2/callback`
 
 ## 2. Configure Argo CD Dex (GitHub) and RBAC
@@ -41,7 +41,7 @@ Create/update oauth2-proxy secret out-of-band (do not commit credentials):
 kubectl -n homelab-web create secret generic oauth2-proxy-secret \
   --from-literal=OAUTH2_PROXY_CLIENT_ID='<PORTAL_GH_CLIENT_ID>' \
   --from-literal=OAUTH2_PROXY_CLIENT_SECRET='<PORTAL_GH_CLIENT_SECRET>' \
-  --from-literal=OAUTH2_PROXY_COOKIE_SECRET='$(openssl rand -base64 24)' \
+  --from-literal=OAUTH2_PROXY_COOKIE_SECRET="$(openssl rand -base64 32)" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
@@ -77,7 +77,7 @@ Set these env vars in API deployment per environment as needed.
 Argo CD claim mapping:
 
 ```bash
-argocd login argocd.dev.homelab.local --sso
+argocd login argocd.wlodzimierrr.co.uk --sso
 argocd account get-user-info
 ```
 

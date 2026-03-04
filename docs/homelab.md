@@ -738,21 +738,39 @@ Recommended immediate relabeling:
 
 #### T3.3.1 Implement secrets-as-code with SOPS (recommended default)
 - **Description:** Encrypt secret manifests at rest in Git and decrypt in-cluster.
-- **Acceptance Criteria:**s
+- **Status:** DONE (2026-03-04)
+- **Acceptance Criteria:**
   - Secrets in repo are encrypted only.
   - Argo CD can deploy and consume decrypted secrets.
 - **Dependencies:** T1.1.1
 - **Complexity:** M
 - **Risk:** High
+- **Evidence:**
+  - ADR `0003` updated to `Accepted` for `SOPS + age` (`docs/adr/0003-secrets-management-strategy-placeholder.md`).
+  - Repo-level SOPS creation rules added at `workloads/.sops.yaml`.
+  - Plaintext secret guardrail script added at `workloads/scripts/check-secrets-guardrails.sh`.
+  - Implementation runbook added at `docs/runbooks/sops-secrets.md`.
+  - Real SOPS-encrypted Postgres secret manifests committed for both dev/prod overlays:
+    - `workloads/apps/homelab-api/envs/dev/postgres-secret.enc.yaml`
+    - `workloads/apps/homelab-api/envs/prod/postgres-secret.enc.yaml`
+  - Dev/prod API overlays now include encrypted secret resources in `kustomization.yaml`.
 
 #### T3.3.2 Create quarterly secret rotation runbook and automation hooks
 - **Description:** Define repeatable process for rotating DB creds, tokens, and registry secrets.
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Rotation checklist exists and is tested once.
   - Rotation causes no prolonged outage (>5 min target).
 - **Dependencies:** T3.3.1
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Quarterly rotation checklist/runbook created at `docs/runbooks/secret-rotation-quarterly.md`.
+  - Automation hook added at `workloads/scripts/verify-rotation-slo.sh` to assert rollout completion within SLO window (default `300s`).
+  - Supporting docs updated in `workloads/README.md` with rotation workflow and command references.
+  - Rotation rehearsal executed on 2026-03-04 with SLO checks passing:
+    - `verify-rotation-slo.sh homelab-api homelab-api 300` -> rollout completed in `0s` (`PASS`).
+    - `verify-rotation-slo.sh homelab-web oauth2-proxy 300` -> rollout completed in `0s` (`PASS`).
 
 ---
 
