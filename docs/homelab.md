@@ -1269,7 +1269,7 @@ Loki, and registry metadata.
 
 #### T4.4.8 Backend API: logs query endpoint for quick-view (Loki proxy, scoped)
 - **Description:** Enable the service logs quick-view panel by adding a backend endpoint that executes a small set of safe, templated Loki queries (errors/restarts/warnings) for a service identity and time range.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - `GET /api/services/:serviceId/logs/quickview?preset=errors&range=1h` returns a bounded list of log lines with timestamps and labels.
   - Only approved query presets are supported (no arbitrary query execution from the client).
@@ -1278,6 +1278,21 @@ Loki, and registry metadata.
 - **Dependencies:** T4.2.1, T4.3.9, T4.4.1
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - New backend logs quick-view endpoint implemented:
+    - `apps/portal/backend/app/main.py` (`GET /services/{serviceId}/logs/quickview`)
+  - Preset-only query builder, range/cursor parsing, and in-memory rate limiter implemented in dedicated helper module:
+    - `apps/portal/backend/app/logs_quickview.py`
+  - Endpoint returns bounded line list with `moreAvailable` and `nextCursor` pagination support.
+  - Auth is enforced via existing bearer/forwarded-user dependency and per-identity rate limiting returns HTTP 429 when exceeded.
+  - Unit tests added for preset validation, cursor/time-window behavior, and rate limiting:
+    - `apps/portal/backend/tests/test_logs_quickview.py`
+  - API tests added for preset rejection, bounded response/pagination indicator, and rate-limit enforcement:
+    - `apps/portal/backend/tests/test_api.py`
+  - Backend config/docs updated:
+    - `apps/portal/backend/README.md`
+  - Validation runbook added:
+    - `docs/runbooks/logs-quickview-endpoint.md`
 
 #### T4.4.9 Frontend: connect logs quick-view panel to live Loki quick-view endpoint
 - **Description:** Replace any mocked log preview with live data from `GET /api/services/:serviceId/logs/quickview` while keeping deep links for full Grafana exploration.
