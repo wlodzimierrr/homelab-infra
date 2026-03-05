@@ -1220,7 +1220,7 @@ Loki, and registry metadata.
 
 #### T4.4.6 Backend API: release traceability endpoint (commit → image → Argo state → drift)
 - **Description:** Replace sample-based release dashboard with live data by implementing a backend endpoint that aggregates CI/build metadata, deployed image, and Argo sync/health per service/environment.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - `GET /api/releases?env=dev&limit=50` returns rows including `{ serviceId, env, commitSha, imageRef, deployedAt, argo: { appName, syncStatus, healthStatus, revision }, drift: { isDrifted, expectedRevision, liveRevision } }`.
   - Drift is computed in a deterministic way and documented (what constitutes drift).
@@ -1229,10 +1229,24 @@ Loki, and registry metadata.
 - **Dependencies:** T4.3.1, T4.4.1, T4.1.1
 - **Complexity:** L
 - **Risk:** Medium
+- **Evidence:**
+  - Live backend release traceability endpoint implemented:
+    - `apps/portal/backend/app/main.py` (`GET /releases`)
+  - Aggregation helper for CI + Argo metadata joins and deterministic drift computation:
+    - `apps/portal/backend/app/release_traceability.py`
+  - Deterministic drift rule documented in backend README and endpoint runbook.
+  - Server-side filtering by `env`, `serviceId`, and `limit` implemented in endpoint query handling.
+  - Missing upstream metadata returns explicit unknown/nullable fields while preserving rows.
+  - API tests for endpoint shape/filtering and compatibility path:
+    - `apps/portal/backend/tests/test_api.py`
+  - Unit tests for drift computation and unknown fallback behavior:
+    - `apps/portal/backend/tests/test_release_traceability.py`
+  - Validation runbook added:
+    - `docs/runbooks/release-traceability-endpoint.md`
 
 #### T4.4.7 Frontend: switch release dashboard adapter from sample to live endpoint
 - **Description:** Update `apps/portal/frontend/src/lib/adapters/release-dashboard.ts` to call the live releases endpoint and keep sample JSON only as an offline/dev fallback.
-- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Dashboard uses live endpoint by default and shows Live indicator when data source is API.
   - Sample JSON is only used when API is unreachable (dev mode) or behind an explicit feature flag.
@@ -1240,9 +1254,18 @@ Loki, and registry metadata.
 - **Dependencies:** T4.3.1, T4.4.6
 - **Complexity:** S
 - **Risk:** Low
-- **Overlap Notes:**
-  - Implemented: adapter is API-first with fallback (`/api/release-dashboard` -> `/api/projects` -> sample JSON), and dashboard already renders live row links when present.
-  - Remaining: switch to `/api/releases`, expose explicit data-source indicator, and restrict sample fallback to dev-mode/feature-flag policy.
+- **Evidence:**
+  - Release dashboard adapter now targets live traceability endpoint by default:
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts` (`GET /api/releases?limit=50`)
+  - Dashboard now shows explicit data-source indicator (`Live`, `Fallback: Projects`, `Fallback: Sample`):
+    - `apps/portal/frontend/src/pages/dashboard-page.tsx`
+  - Sample fallback is restricted to dev mode or explicit feature flag:
+    - `VITE_ENABLE_RELEASE_SAMPLE_FALLBACK=true`
+    - `apps/portal/frontend/src/lib/config.ts`
+  - Argo link values are built from live rows and remain deterministic across refresh:
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+  - Validation runbook updated:
+    - `docs/runbooks/release-traceability-dashboard.md`
 
 #### T4.4.8 Backend API: logs query endpoint for quick-view (Loki proxy, scoped)
 - **Description:** Enable the service logs quick-view panel by adding a backend endpoint that executes a small set of safe, templated Loki queries (errors/restarts/warnings) for a service identity and time range.

@@ -15,9 +15,9 @@ The dashboard provides release traceability across:
 
 Dashboard loading order:
 
-1. `GET /api/release-dashboard` (future/optional backend endpoint)
+1. `GET /api/releases?limit=50` (live traceability endpoint)
 2. `GET /api/projects` mapped to minimal release rows (sync + health + environment)
-3. Frontend fallback file `apps/portal/frontend/release-dashboard.sample.json`
+3. Frontend fallback file `apps/portal/frontend/release-dashboard.sample.json` only when enabled in dev mode or with `VITE_ENABLE_RELEASE_SAMPLE_FALLBACK=true`
 
 Notes:
 
@@ -36,6 +36,7 @@ Notes:
 4. Confirm image cell opens registry/package URL when link metadata exists.
 5. Confirm drift badge shows `Drift detected` for out-of-sync or mismatched desired/deployed metadata.
 6. Use `Drift only` filter and verify non-drifted rows are hidden.
+7. Confirm data-source badge is shown (`Live`, `Fallback: Projects`, or `Fallback: Sample`).
 
 ## 4. Troubleshooting
 
