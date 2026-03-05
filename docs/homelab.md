@@ -1296,7 +1296,7 @@ Loki, and registry metadata.
 
 #### T4.4.9 Frontend: connect logs quick-view panel to live Loki quick-view endpoint
 - **Description:** Replace any mocked log preview with live data from `GET /api/services/:serviceId/logs/quickview` while keeping deep links for full Grafana exploration.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Quick-view panel loads logs for at least 3 presets (`errors`, `restarts`, `warnings`) with range selector.
   - Loading, empty, and error states are non-blocking and keep deep link usable.
@@ -1304,6 +1304,14 @@ Loki, and registry metadata.
 - **Dependencies:** T4.3.9, T4.4.8, T4.3.5
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - Service details logs quick-view drawer now fetches live backend data for `errors`, `restarts`, and `warnings` presets with range selector (`15m`, `1h`, `6h`, `24h`):
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Dedicated frontend adapter added for Loki quick-view endpoint and response normalization:
+    - `apps/portal/frontend/src/lib/adapters/logs-quickview.ts`
+  - Quick-view renders non-blocking loading, empty, and error states while preserving Grafana deep-link action.
+  - Validation runbook added:
+    - `docs/runbooks/logs-quickview-live-frontend.md`
 
 #### T4.4.10 Backend API: active alerts feed endpoint (for platform page + global banner)
 - **Description:** Provide a backend endpoint to expose current active alerts (from Prometheus/Alertmanager) mapped to portal severities and optionally to services.
