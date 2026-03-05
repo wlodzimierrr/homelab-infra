@@ -21,9 +21,8 @@ Each card shows:
 
 Load order for metrics:
 
-1. `GET /api/services/{serviceId}/metrics-summary`
-2. local fallback file: `apps/portal/frontend/service-metrics.sample.json`
-3. safe no-data fallback (all metric values undefined)
+1. `GET /api/services/{serviceId}/metrics/summary?range={1h|24h|7d}`
+2. safe no-data fallback driven by backend `noData` map when individual metrics are missing
 
 ## 3. Threshold mapping
 
@@ -59,4 +58,3 @@ Severity thresholds currently configured in service detail page:
 - `apps/portal/frontend/src/pages/service-details-page.tsx`
 - `apps/portal/frontend/src/components/service-metric-card.tsx`
 - `apps/portal/frontend/src/lib/adapters/service-metrics.ts`
-- `apps/portal/frontend/service-metrics.sample.json`

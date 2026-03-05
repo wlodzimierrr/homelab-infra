@@ -1159,7 +1159,7 @@ Loki, and registry metadata.
 
 #### T4.4.3 Frontend: replace metrics-card mocks with live summary endpoint
 - **Description:** Wire T4.3.2 metric cards to `GET /api/services/:serviceId/metrics/summary` with loading, stale, and partial no-data handling.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Service detail page metric cards fetch live data on load and on time-range change.
   - Cards show last refreshed timestamp (from `generatedAt`) and a stale indicator if older than a configurable threshold.
@@ -1168,6 +1168,17 @@ Loki, and registry metadata.
 - **Dependencies:** T4.3.2, T4.4.2
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - Service metrics adapter now uses live backend summary endpoint with explicit range support:
+    - `apps/portal/frontend/src/lib/adapters/service-metrics.ts`
+  - Service detail metrics section now fetches on load and range change (`1h`, `24h`, `7d`) and includes inline retry for non-blocking errors:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Metric cards now render loading placeholders, explicit per-card no-data states, and stale indicators:
+    - `apps/portal/frontend/src/components/service-metric-card.tsx`
+  - Stale threshold is configurable with `VITE_METRICS_STALE_AFTER_MINUTES`:
+    - `apps/portal/frontend/src/lib/config.ts`
+  - Validation runbook added:
+    - `docs/runbooks/service-metrics-live-summary-frontend.md`
 
 #### T4.4.4 Backend API: service health timeline endpoint (status over time)
 - **Description:** Provide a backend endpoint that returns a compact status timeline (healthy/degraded/down/unknown segments) for a service over a selected window, computed from Prometheus signals (availability + error rate + readiness).
