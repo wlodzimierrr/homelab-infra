@@ -893,7 +893,7 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 
 #### T4.3.2 Service metrics summary cards on service detail page
 - **Description:** Add summary cards to each service page for uptime %, p95 latency, error rate, and restart count, using existing service identity metadata.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Service detail page shows four metric cards with current values and last refresh timestamp.
   - Card states include healthy/warning/critical thresholds and match shared status styling.
@@ -901,10 +901,21 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.2, T1.6.3, T4.1.2
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Service detail page now renders four metric cards (uptime, p95 latency, error rate, restart count), including per-card severity and last refresh timestamp:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Shared metric card component added with explicit `No data` rendering and status tone mapping:
+    - `apps/portal/frontend/src/components/service-metric-card.tsx`
+  - Metrics adapter added with API-first loading and safe fallback behavior:
+    - `apps/portal/frontend/src/lib/adapters/service-metrics.ts`
+  - Fallback sample metrics dataset added:
+    - `apps/portal/frontend/service-metrics.sample.json`
+  - Validation runbook added:
+    - `docs/runbooks/service-metrics-summary-cards.md`
 
 #### T4.3.3 Shared uptime indicator widget and status mapping
 - **Description:** Implement a reusable uptime indicator component (24h and 7d) with threshold-to-severity mapping for consistent status presentation across pages.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Shared widget component is available in the frontend component library and reused in at least two screens.
   - Threshold mapping is centrally configurable and unit-tested.
@@ -912,10 +923,23 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.3, T4.3.2
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - Shared uptime indicator component added with loading, stale-data, and no-data support:
+    - `apps/portal/frontend/src/components/uptime-indicator.tsx`
+  - Centralized threshold + status mapping module added:
+    - `apps/portal/frontend/src/lib/uptime-status.ts`
+  - Widget reused in at least two screens:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+    - `apps/portal/frontend/src/pages/services-page.tsx`
+  - Unit tests added for status mapping helpers and stale detection:
+    - `apps/portal/frontend/tests/uptime-status.test.ts`
+    - `apps/portal/frontend/tsconfig.test.json`
+  - Validation runbook added:
+    - `docs/runbooks/uptime-indicator-widget.md`
 
 #### T4.3.4 Embedded Grafana panels for latency and error trends
 - **Description:** Embed selected Grafana panels inside service detail pages for response time and error-rate trends, with a fallback deep link when embedding is unavailable.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Service detail page renders at least two embedded panels (latency, errors) for the selected service.
   - "Open in Grafana" action preserves service and time-range context.
@@ -923,10 +947,19 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.2, T1.6.6, T4.1.2
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Service detail page now includes embedded Grafana panel section with latency and error trends:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Reusable embedded panel component added with timeout/error fallback and deep-link actions:
+    - `apps/portal/frontend/src/components/grafana-embed-panel.tsx`
+  - Grafana panel URL builders and time-range interpolation support added:
+    - `apps/portal/frontend/src/lib/config.ts`
+  - Validation runbook added:
+    - `docs/runbooks/grafana-embedded-panels.md`
 
 #### T4.3.5 Template-driven monitoring URL builder (Grafana + Loki)
 - **Description:** Extend frontend URL templating so monitoring links can inject variables (service, namespace, environment, range) without hardcoded page-specific logic.
-- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - URL template helper supports variable interpolation for Grafana and Loki routes.
   - Service detail and logs entry points use shared template helper.
@@ -934,13 +967,19 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.5, T1.6.6
 - **Complexity:** S
 - **Risk:** Low
-- **Overlap Notes:**
-  - Implemented: shared template interpolation and URL builders exist in `apps/portal/frontend/src/lib/config.ts` and are used by service-detail quick links.
-  - Remaining: explicit development-time warnings/fallback behavior for missing template variables.
+- **Evidence:**
+  - Shared monitoring URL template helper added with interpolation, safe fallback, and dev-mode warnings:
+    - `apps/portal/frontend/src/lib/config.ts`
+  - Service detail quick links and logs entry points continue to consume shared config builders:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Quick links now render safe unavailable state when URL configuration resolves to empty:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Validation runbook added:
+    - `docs/runbooks/monitoring-url-template-builder.md`
 
 #### T4.3.6 Service health timeline (status-over-time)
 - **Description:** Add a compact timeline view on the service page to visualize health transitions (healthy, degraded, down) over time.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Timeline shows status segments for a selectable window (default 24h).
   - Hover/click on a segment shows timestamp and status reason metadata when available.
@@ -948,6 +987,17 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.2, T1.6.3, T4.3.3
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Reusable timeline component added with compact segments, hover/click metadata, and responsive layout:
+    - `apps/portal/frontend/src/components/service-health-timeline.tsx`
+  - Health timeline adapter added with API-first loading and sample fallback:
+    - `apps/portal/frontend/src/lib/adapters/service-health-timeline.ts`
+  - Service detail page now includes selectable timeline window (`6h`, `24h`, `7d`; default `24h`):
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Fallback timeline dataset added:
+    - `apps/portal/frontend/service-health-timeline.sample.json`
+  - Validation runbook added:
+    - `docs/runbooks/service-health-timeline.md`
 
 #### T4.3.7 Deployment observability overlay on deployment history
 - **Description:** Enrich deployment history rows with post-deploy metric snapshots (error-rate delta, latency delta, availability impact) to speed regression detection.
@@ -962,7 +1012,7 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 
 #### T4.3.8 Unhealthy deployment and degraded service highlighting
 - **Description:** Add frontend detection rules to flag suspicious deployments and propagate degraded badges to service list and detail views.
-- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Rule set identifies unhealthy deployments using configurable thresholds (for example error spike or readiness drop).
   - Service list and service detail views show consistent degraded badge treatment.
@@ -970,13 +1020,23 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.1, T1.6.3, T1.6.4, T4.3.7
 - **Complexity:** M
 - **Risk:** Medium
-- **Overlap Notes:**
-  - Implemented: degraded/unknown status badges already render in services and service-detail views.
-  - Remaining: threshold-based unhealthy deployment detection rules and test-covered alerting helper.
+- **Evidence:**
+  - Threshold-based deployment alerting rules and severity evaluation isolated in helper module with configurable thresholds:
+    - `apps/portal/frontend/src/lib/deployment-alerts.ts`
+  - Deployment history page consumes alert rules to prioritize and highlight suspicious rows:
+    - `apps/portal/frontend/src/pages/service-deployments-page.tsx`
+  - Service detail page propagates suspicious deployment state into degraded status treatment and warning banner:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Service list page applies consistent degraded badge treatment for services with suspicious recent deployments:
+    - `apps/portal/frontend/src/pages/services-page.tsx`
+  - Unit tests added for alert helper logic:
+    - `apps/portal/frontend/tests/deployment-alerts.test.ts`
+  - Validation runbook added:
+    - `docs/runbooks/unhealthy-deployment-highlighting.md`
 
 #### T4.3.9 Logs quick-view panel on service detail
 - **Description:** Add a service-level logs quick-view drawer with prebuilt Loki queries and one-click deep links for full investigation in Grafana.
-- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Service detail page includes "View logs" action that opens an inline quick-view panel.
   - Panel provides at least three prebuilt query shortcuts (errors, restarts, recent warnings) scoped to service label/namespace.
@@ -984,13 +1044,19 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.2, T1.6.5, T4.2.1, T4.3.5
 - **Complexity:** M
 - **Risk:** Medium
-- **Overlap Notes:**
-  - Implemented: service detail page already provides Grafana/Loki deep link generation with service/namespace/range templating.
-  - Remaining: inline quick-view panel and preset shortcuts (errors/restarts/warnings).
+- **Evidence:**
+  - Service detail page now includes a `View logs` inline quick-view drawer with preset shortcuts:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Presets implemented for Errors, Restarts, and Warnings with scoped query previews and one-click Grafana deep links:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Shared logs URL builder now supports optional preset/query variables for equivalent deep-link context:
+    - `apps/portal/frontend/src/lib/config.ts`
+  - Validation runbook added:
+    - `docs/runbooks/logs-quick-view-panel.md`
 
 #### T4.3.10 Platform health page in portal UI
 - **Description:** Create a dedicated portal page aggregating platform-wide service health, alert counts, and top active incidents from monitoring adapters.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - New route displays platform summary cards, unhealthy services list, and latest alert feed.
   - Page links back to service detail pages and external Grafana dashboards.
@@ -998,10 +1064,23 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.3, T4.1.2, T4.3.8
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - New platform-wide health route and page implemented with summary cards, unhealthy services list, and latest incident feed:
+    - `apps/portal/frontend/src/pages/platform-health-page.tsx`
+  - Monitoring aggregation adapter added with partial-failure warnings and incidents fallback source:
+    - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+  - Incidents sample fallback data added:
+    - `apps/portal/frontend/platform-health.sample.json`
+  - Route and portal navigation wired for desktop and mobile:
+    - `apps/portal/frontend/src/App.tsx`
+    - `apps/portal/frontend/src/components/navigation/portal-sidebar.tsx`
+    - `apps/portal/frontend/src/components/navigation/topbar.tsx`
+  - Validation runbook added:
+    - `docs/runbooks/platform-health-page.md`
 
 #### T4.3.11 Global incident banner and alert badges
 - **Description:** Add an app-wide incident banner and per-service alert badges driven by active monitoring severity states.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Global banner appears on all main portal routes when active incidents exceed configured severity.
   - Service cards/rows show alert count badges with severity color mapping.
@@ -1009,6 +1088,21 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 - **Dependencies:** T1.6.1, T1.6.3, T4.3.10
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - App-wide incident polling and banner display logic added with session dismissal behavior and critical visibility override:
+    - `apps/portal/frontend/src/App.tsx`
+  - Reusable incident banner component added:
+    - `apps/portal/frontend/src/components/incident-banner.tsx`
+  - Incident severity/count mapping helper added for service-level badges and banner gating:
+    - `apps/portal/frontend/src/lib/incident-alerts.ts`
+  - Service list rows now show per-service alert count badges with severity tone mapping:
+    - `apps/portal/frontend/src/pages/services-page.tsx`
+  - Service detail page header now shows matching per-service alert count badge:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Unit tests added for threshold normalization, snapshot mapping, and banner visibility semantics:
+    - `apps/portal/frontend/tests/incident-alerts.test.ts`
+  - Validation runbook added:
+    - `docs/runbooks/global-incident-banner-alert-badges.md`
 
 ### E4.4 Live Monitoring Data Integration
 
