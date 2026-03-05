@@ -1112,7 +1112,7 @@ Loki, and registry metadata.
 
 #### T4.4.1 Define service identity contract for monitoring joins
 - **Description:** Standardize how the portal identifies a service across Argo, Prometheus, Loki, and the portal registry (name, namespace, app label, environment).
-- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - A single `ServiceIdentity` shape is defined and used across monitoring APIs and frontend adapters (fields include `serviceId`, `serviceName`, `namespace`, `env`, `appLabel`, optional `argoAppName`).
   - Frontend services adapter provides (or can derive) the required identity fields for all service rows and service detail routes.
@@ -1120,13 +1120,22 @@ Loki, and registry metadata.
 - **Dependencies:** T1.6.7, T1.6.5, T1.6.6
 - **Complexity:** S
 - **Risk:** Medium
-- **Overlap Notes:**
-  - Implemented: service registry adapter already carries partial identity fields (`id/name/environments` with optional `namespace` and `appLabel`).
-  - Remaining: canonical `ServiceIdentity` contract, backend/frontend-wide adoption, and contract documentation.
+- **Evidence:**
+  - Canonical service identity contract introduced and shared as frontend source-of-truth:
+    - `apps/portal/frontend/src/lib/service-identity.ts`
+  - Services adapter now derives and exposes identity fields for service rows and detail-route derivation:
+    - `apps/portal/frontend/src/lib/adapters/services.ts`
+  - Monitoring adapters updated to accept/use `ServiceIdentity` context for service monitoring joins:
+    - `apps/portal/frontend/src/lib/adapters/deployments.ts`
+    - `apps/portal/frontend/src/lib/adapters/service-metrics.ts`
+    - `apps/portal/frontend/src/lib/adapters/service-health-timeline.ts`
+    - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+  - Contract documented with field definitions and examples for 2 services across 2 environments:
+    - `docs/contracts/service-identity.md`
 
 #### T4.4.2 Backend API: service metrics summary endpoint (uptime, p95, error rate, restarts)
 - **Description:** Implement a backend endpoint to return live summary metrics for a given service identity and time range, backed by Prometheus queries.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - `GET /api/services/:serviceId/metrics/summary?range=24h` returns `{ uptimePct, p95LatencyMs, errorRatePct, restartCount, windowStart, windowEnd, generatedAt }`.
   - Query range supports at least `1h`, `24h`, `7d` with server-side validation.
@@ -1135,6 +1144,18 @@ Loki, and registry metadata.
 - **Dependencies:** T4.1.1, T1.2.1, T4.3.2
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - New backend metrics-summary endpoint implemented:
+    - `apps/portal/backend/app/main.py` (`GET /services/{serviceId}/metrics/summary`)
+  - Supported range validation implemented server-side (`1h`, `24h`, `7d`) with FastAPI query pattern validation.
+  - Response includes `uptimePct`, `p95LatencyMs`, `errorRatePct`, `restartCount`, `windowStart`, `windowEnd`, `generatedAt`, and per-metric `noData` flags.
+  - Prometheus non-200 and query failures translated to stable HTTP 502 errors with `correlation_id` in logs/error detail.
+  - Backward-compat route alias added for existing clients:
+    - `GET /services/{serviceId}/metrics-summary`
+  - API tests added for success, invalid range, no-data semantics, legacy route, and Prometheus failure translation:
+    - `apps/portal/backend/tests/test_api.py`
+  - Validation runbook added:
+    - `docs/runbooks/service-metrics-summary-endpoint.md`
 
 #### T4.4.3 Frontend: replace metrics-card mocks with live summary endpoint
 - **Description:** Wire T4.3.2 metric cards to `GET /api/services/:serviceId/metrics/summary` with loading, stale, and partial no-data handling.
