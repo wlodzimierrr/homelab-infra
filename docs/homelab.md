@@ -1341,7 +1341,7 @@ Loki, and registry metadata.
 
 #### T4.4.11 Frontend: wire platform health page and incident banner to live alerts feed
 - **Description:** Use `GET /api/alerts/active` to power the platform health page alert feed and the global incident banner + per-service badges.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Platform health page shows alert list with severity, start time, and links to relevant services (when mapped).
   - Global banner appears when active alerts exceed configured severity threshold.
@@ -1349,10 +1349,22 @@ Loki, and registry metadata.
 - **Dependencies:** T4.3.10, T4.3.11, T4.4.10
 - **Complexity:** M
 - **Risk:** Low
+- **Evidence:**
+  - Platform health adapter now uses live `GET /api/alerts/active` as primary source for incidents/alerts and keeps compatibility fallback:
+    - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+  - Platform health page alert feed renders severity, start time, mapped service links, and Grafana deep links from live alert data:
+    - `apps/portal/frontend/src/pages/platform-health-page.tsx`
+  - Global incident banner + per-service badges continue to derive from live alert snapshot polling in app shell:
+    - `apps/portal/frontend/src/App.tsx`
+    - `apps/portal/frontend/src/lib/incident-alerts.ts`
+  - Critical incidents remain visible after dismissal (session dismissal only hides non-critical severities):
+    - `apps/portal/frontend/tests/incident-alerts.test.ts`
+  - Validation runbook added:
+    - `docs/runbooks/platform-health-live-alerts-frontend.md`
 
 #### T4.4.12 Observability config hardening: query templates, limits, caching
 - **Description:** Add config knobs for ranges, limits, caching TTLs, and query templates so live monitoring endpoints are safe and stable under frequent portal refresh.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - Backend monitoring endpoints implement caching (per service + range) with configurable TTL.
   - All endpoints enforce sane bounds (max range, max step resolution, max rows/log lines).
@@ -1361,6 +1373,19 @@ Loki, and registry metadata.
 - **Dependencies:** T4.4.2, T4.4.4, T4.4.8, T4.4.10
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Shared observability config module added for allowed ranges, limits, cache TTLs, and query template env knobs:
+    - `apps/portal/backend/app/observability_config.py`
+  - In-memory TTL cache helper added and applied to metrics summary, health timeline, logs quick-view, and active alerts endpoints:
+    - `apps/portal/backend/app/observability_cache.py`
+    - `apps/portal/backend/app/main.py`
+  - Monitoring endpoints now enforce configured bounds for timeline points, logs max rows, alerts max rows, and allowed ranges.
+  - Query templates documented with variable contracts:
+    - `docs/monitoring/query-templates.md`
+  - Repeated-refresh smoke test script added:
+    - `apps/portal/backend/scripts/monitoring_refresh_smoke.py`
+  - Validation runbook added:
+    - `docs/runbooks/observability-config-hardening.md`
 
 ---
 
