@@ -1315,7 +1315,7 @@ Loki, and registry metadata.
 
 #### T4.4.10 Backend API: active alerts feed endpoint (for platform page + global banner)
 - **Description:** Provide a backend endpoint to expose current active alerts (from Prometheus/Alertmanager) mapped to portal severities and optionally to services.
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - `GET /api/alerts/active` returns an array with `{ id, severity, title, description?, startsAt, labels, serviceId?, env? }`.
   - Severity mapping (`warning`/`critical`) is consistent with frontend badge styles and documented.
@@ -1324,6 +1324,20 @@ Loki, and registry metadata.
 - **Dependencies:** T4.1.2, T4.3.10, T4.3.11
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - New active alerts endpoint implemented:
+    - `apps/portal/backend/app/main.py` (`GET /alerts/active`)
+  - Alertmanager normalization and severity mapping helper added:
+    - `apps/portal/backend/app/alerts_feed.py`
+  - Endpoint supports `env` and `serviceId` filters with normalized response shape.
+  - Upstream Alertmanager failures degrade gracefully by returning HTTP 200 with an empty list and logged correlation metadata.
+  - Compatibility incidents route added for existing frontend adapter:
+    - `apps/portal/backend/app/main.py` (`GET /monitoring/incidents`)
+  - API and helper tests added:
+    - `apps/portal/backend/tests/test_api.py`
+    - `apps/portal/backend/tests/test_alerts_feed.py`
+  - Validation runbook added:
+    - `docs/runbooks/active-alerts-endpoint.md`
 
 #### T4.4.11 Frontend: wire platform health page and incident banner to live alerts feed
 - **Description:** Use `GET /api/alerts/active` to power the platform health page alert feed and the global incident banner + per-service badges.
