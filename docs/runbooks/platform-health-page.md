@@ -17,8 +17,7 @@ Load sequence:
 
 1. service registry via `getServicesRegistry()`
 2. deployment alert rollups via `getDeploymentHistory()` + `summarizeDeploymentAlerts()`
-3. incidents via `GET /api/monitoring/incidents`
-4. fallback incidents from `apps/portal/frontend/platform-health.sample.json`
+3. incidents via `GET /api/alerts/active`
 
 Partial failures are surfaced as warning messages on-page.
 
@@ -37,15 +36,14 @@ Partial failures are surfaced as warning messages on-page.
 5. Simulate incident API failure (or use a disconnected backend) and confirm:
    - page still renders summary and other available sections
    - partial data warning banner is visible
-   - incident feed falls back to sample entries when available
+   - incident feed remains empty (no fabricated sample entries)
 
 ## 4. Troubleshooting
 
 - No unhealthy services shown:
   - verify service registry has entries and deployment history adapter can resolve recent deployments
 - Incident list empty:
-  - check `GET /api/monitoring/incidents` response shape (`incidents[]`)
-  - verify fallback file exists and is valid JSON
+  - check `GET /api/alerts/active` response shape
 - Grafana links unavailable:
   - verify `VITE_GRAFANA_BASE_URL` and dashboard template settings
 
@@ -53,7 +51,6 @@ Partial failures are surfaced as warning messages on-page.
 
 - `apps/portal/frontend/src/pages/platform-health-page.tsx`
 - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
-- `apps/portal/frontend/platform-health.sample.json`
 - `apps/portal/frontend/src/App.tsx`
 - `apps/portal/frontend/src/components/navigation/portal-sidebar.tsx`
 - `apps/portal/frontend/src/components/navigation/topbar.tsx`

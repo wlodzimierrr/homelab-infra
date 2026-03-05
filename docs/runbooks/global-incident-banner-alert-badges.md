@@ -15,8 +15,7 @@ Portal behavior includes:
 
 Incident signals load from:
 
-1. `GET /api/monitoring/incidents`
-2. fallback `apps/portal/frontend/platform-health.sample.json`
+1. `GET /api/alerts/active`
 
 Banner severity threshold is configured by `VITE_INCIDENT_BANNER_MIN_SEVERITY` (`warning` default).
 

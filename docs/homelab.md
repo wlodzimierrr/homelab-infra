@@ -120,6 +120,8 @@ Recommended immediate relabeling:
 - E4.2 Centralized logging (Loki preferred for homelab simplicity)
 - E4.3 Deployment, health, and change visibility
 - E4.4 Live monitoring data integration (Portal API + adapters)
+- E4.5 Frontend live-data finalization (no mock/sample UI paths)
+- E4.6 Backend service registry and project-source normalization
 
 ---
 
@@ -488,6 +490,7 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.4.4, T1.6.2
 - **Complexity:** M
 - **Risk:** Low
+- **Change Note:** This MVP read-only mocked adapter is superseded in Level 3 by `T6.7.2` (deployment-record-backed timeline).
 - **Evidence:**
   - Deployment history page implemented in `apps/portal/frontend/src/pages/service-deployments-page.tsx` with read-only table, loading, empty, and error states.
   - Adapter isolated to `apps/portal/frontend/src/lib/adapters/deployments.ts` (`getDeploymentHistory`) with backend-first fetch and mocked fallback.
@@ -1006,9 +1009,10 @@ and Grafana provisioning are handled in E4.1 and E4.2.
   - Deployment history rows include before/after indicators for at least error rate and latency.
   - Rows with missing comparison windows display explicit unavailable state.
   - Sorting/filtering can prioritize deployments with negative health deltas.
-- **Dependencies:** T1.6.4, T4.1.2, T4.3.2
+- **Dependencies:** T1.6.4, T4.1.2, T4.3.2, T6.6.2
 - **Complexity:** M
 - **Risk:** Medium
+- **Change Note:** Updated to consume Phase 6 deployment records as the canonical deployment-history source instead of mock-only rows.
 
 #### T4.3.8 Unhealthy deployment and degraded service highlighting
 - **Description:** Add frontend detection rules to flag suspicious deployments and propagate degraded badges to service list and detail views.
@@ -1132,6 +1136,7 @@ Loki, and registry metadata.
     - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
   - Contract documented with field definitions and examples for 2 services across 2 environments:
     - `docs/contracts/service-identity.md`
+- **Change Note:** Level 3 enforcement hardening is tracked in `T6.4.4` and `T6.6.5` to ensure this contract becomes mandatory across GitOps/deploy workflows.
 
 #### T4.4.2 Backend API: service metrics summary endpoint (uptime, p95, error rate, restarts)
 - **Description:** Implement a backend endpoint to return live summary metrics for a given service identity and time range, backed by Prometheus queries.
@@ -1387,6 +1392,392 @@ Loki, and registry metadata.
   - Validation runbook added:
     - `docs/runbooks/observability-config-hardening.md`
 
+### E4.5 Frontend Live-Data Finalization (No Mock/Sample UI Paths)
+
+Scope: Finalize Portal UI behavior so dashboard/service/platform screens render
+cluster-backed data only. Remove all sample/mock fallback paths in frontend
+adapters and replace placeholder content with explicit live-data states.
+
+#### T4.5.1 Enforce strict live-data mode in frontend adapters
+- **Description:** Remove sample JSON fallback behavior from dashboard/services/platform adapters for non-dev environments and add a strict live-data mode that fails closed.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Release dashboard adapter does not use `release-dashboard.sample.json` unless explicitly enabled in local dev.
+  - Services/platform adapters do not silently switch to sample payloads in cluster environments.
+  - A single frontend config flag controls strict behavior (`no sample fallback`) and defaults to enabled for deployed envs.
+- **Dependencies:** T4.4.7, T4.4.11
+- **Complexity:** S
+- **Risk:** Low
+- **Evidence:**
+  - Release dashboard adapter now uses live API sources only (`/releases` then `/projects`) and no sample dataset path:
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+  - Services and platform adapters no longer contain sample JSON fallback logic:
+    - `apps/portal/frontend/src/lib/adapters/services.ts`
+    - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+  - Live-data-only behavior is now unconditional after decommission (strict-mode flag path superseded by T4.5.9):
+    - `apps/portal/frontend/src/lib/config.ts`
+
+#### T4.5.2 Remove mock deployment rows from service overview
+- **Description:** Replace `createMockDeployments` and deployment mock fallback in service details with explicit empty/error UI states tied to live deployment history.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Service detail page no longer renders synthetic `*-mock-*` deployments.
+  - When deployment history is unavailable, UI shows explicit unavailable state with retry.
+  - Deployment preview on service detail and full deployment page are consistent for the same service.
+- **Dependencies:** T1.6.4, T4.3.7
+- **Complexity:** S
+- **Risk:** Low
+- **Evidence:**
+  - Service detail deployments section now renders explicit unavailable/empty states with retry, and no synthetic rows:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+  - Full deployments page uses the same live deployment history adapter path:
+    - `apps/portal/frontend/src/pages/service-deployments-page.tsx`
+  - Deployment adapter no longer generates mock deployments (`createMockDeployments` removed):
+    - `apps/portal/frontend/src/lib/adapters/deployments.ts`
+
+#### T4.5.3 Service registry/API-only source for dashboard joins
+- **Description:** Eliminate static `services.sample.json` dependency and require API-backed service identity metadata for all dashboard joins and links.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Services adapter no longer loads sample registry in deployed env.
+  - Missing registry API produces explicit page-level partial-failure state rather than fallback rows.
+  - Dashboard/service-detail link generation continues to work from live registry identity fields.
+- **Dependencies:** T4.4.1
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - Services adapter is API-only and derives canonical registry rows from `/projects` metadata:
+    - `apps/portal/frontend/src/lib/adapters/services.ts`
+  - Release dashboard performs registry join normalization (ID/name mapping) for stable links:
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+  - Dashboard renders explicit partial-data warning banner when registry join is incomplete/unavailable:
+    - `apps/portal/frontend/src/pages/dashboard-page.tsx`
+
+#### T4.5.4 Release dashboard completeness contract for live rows
+- **Description:** Ensure release dashboard renders full live traceability fields (commit/image/Argo/drift) and clearly distinguishes unknown upstream values from missing UI wiring.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Rows show populated live values when backend provides metadata.
+  - Unknown fields are labeled as upstream unknown (not fallback/sample).
+  - Dashboard-level indicator shows live source status and unknown-field count.
+- **Dependencies:** T4.4.6, T4.4.7
+- **Complexity:** S
+- **Risk:** Low
+- **Evidence:**
+  - Release dashboard adapter emits `liveStatus` and `unknownFieldCount` for rendered live rows:
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+  - Dashboard UI shows live-source indicator, unknown count card, and per-cell upstream-unknown labeling:
+    - `apps/portal/frontend/src/pages/dashboard-page.tsx`
+
+#### T4.5.5 Platform health and incident feed: live-only behavior
+- **Description:** Remove sample incident fallback usage from platform health flow and keep page usable using explicit live-feed degradation states.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - `platform-health.sample.json` is not used in deployed env.
+  - Incident banner/service badges are derived only from `/api/alerts/active`.
+  - Upstream failures surface as non-blocking warnings without fabricating incident rows.
+- **Dependencies:** T4.4.10, T4.4.11
+- **Complexity:** S
+- **Risk:** Low
+- **Evidence:**
+  - Platform health adapter now sources incident feed only from `/api/alerts/active`:
+    - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+  - Upstream alert failures surface as warnings with empty incident lists (no fabricated rows):
+    - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+  - App-level incident badge/banner snapshot continues to derive from live alerts feed polling:
+    - `apps/portal/frontend/src/App.tsx`
+
+#### T4.5.6 Dashboard auth/session diagnostics for API gating
+- **Description:** Add frontend diagnostics surface for auth-gated API failures (for example OAuth2-proxy 401 HTML responses) so operators can distinguish data absence from auth routing issues.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Dashboard shows a clear diagnostic message when API returns auth HTML/redirect payload instead of JSON.
+  - UI exposes a consistent remediation hint (session expired, not forwarded auth headers, etc.).
+  - Diagnostics are non-blocking and do not crash route rendering.
+- **Dependencies:** T4.4.11
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - Frontend API client detects auth-gateway HTML/redirect responses and raises structured diagnostic errors:
+    - `apps/portal/frontend/src/lib/api.ts`
+  - Dashboard renders dedicated non-blocking auth/session diagnostics panel with remediation hints:
+    - `apps/portal/frontend/src/pages/dashboard-page.tsx`
+
+#### T4.5.7 Cluster identity normalization for release/metrics joins
+- **Description:** Standardize service identifiers used in UI and backend joins (avoid mixed human-readable names and runtime app IDs) to improve live data population consistency.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Dashboard release rows map to canonical `serviceId` values used by metrics/logs/adapters.
+  - Join mismatch cases are surfaced in diagnostics with explicit keys.
+  - At least one migration runbook documents normalization steps for existing project rows.
+- **Dependencies:** T4.4.1, T4.4.6
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - Shared canonical service ID normalizer added and used by identity creation:
+    - `apps/portal/frontend/src/lib/service-identity.ts`
+  - Services and release adapters normalize IDs consistently for joins/routes:
+    - `apps/portal/frontend/src/lib/adapters/services.ts`
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+  - Join mismatch diagnostics include explicit unmatched keys (`serviceId|serviceName|environment`):
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+  - Migration runbook added:
+    - `docs/runbooks/cluster-identity-normalization.md`
+
+#### T4.5.8 End-to-end live-data validation suite (UI + API)
+- **Description:** Add smoke checks that verify dashboard pages are populated from live API responses and no sample/mock paths are exercised in deployed environments.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Automated checks cover dashboard, service detail, platform health, and logs quick-view.
+  - Tests assert that sample files are not fetched and mock row markers are absent.
+  - Validation runbook includes manual plus scripted checks for cluster deployments.
+- **Dependencies:** T4.5.1, T4.5.2, T4.5.5
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - Scripted smoke suite added for dashboard, service detail, platform health, and logs quick-view live API checks:
+    - `apps/portal/frontend/scripts/live_data_smoke.sh`
+  - Frontend npm script added:
+    - `apps/portal/frontend/package.json` (`test:live-smoke`)
+  - Script asserts mock/sample markers are absent and sample asset paths are not served in deployed UI paths.
+  - Manual + scripted validation runbook added:
+    - `docs/runbooks/live-data-validation-suite.md`
+
+#### T4.5.9 Decommission sample/mock assets after cutover
+- **Description:** Remove obsolete sample JSON files and dead fallback code after live-data cutover is verified.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Unused sample assets are deleted or explicitly marked local-dev-only.
+  - Fallback-only code paths are removed from adapters/pages.
+  - Documentation is updated to describe live-data-only behavior in cluster environments.
+- **Dependencies:** T4.5.8
+- **Complexity:** S
+- **Risk:** Low
+- **Evidence:**
+  - Frontend sample JSON assets deleted:
+    - `apps/portal/frontend/release-dashboard.sample.json` (deleted)
+    - `apps/portal/frontend/services.sample.json` (deleted)
+    - `apps/portal/frontend/platform-health.sample.json` (deleted)
+    - `apps/portal/frontend/service-health-timeline.sample.json` (deleted)
+    - `apps/portal/frontend/service-metrics.sample.json` (deleted)
+  - Fallback-only code paths removed from release/timeline/deployments adapters:
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+    - `apps/portal/frontend/src/lib/adapters/service-health-timeline.ts`
+    - `apps/portal/frontend/src/lib/adapters/deployments.ts`
+  - Runbooks updated for live-data-only cluster behavior:
+    - `docs/runbooks/release-traceability-dashboard.md`
+    - `docs/runbooks/platform-health-page.md`
+    - `docs/runbooks/service-health-timeline.md`
+    - `docs/runbooks/global-incident-banner-alert-badges.md`
+    - `docs/runbooks/strict-live-data-mode-frontend.md`
+
+---
+
+### E4.6 Backend Service Registry and Project Source Normalization
+
+Scope: Remove seeded/default project behavior from backend request paths and
+standardize a canonical, cluster-backed service registry model used by
+`/projects`, release joins, and monitoring identity resolution.
+
+#### T4.6.1 Define backend service registry schema (canonical identity + provenance)
+- **Description:** Add canonical backend schema for service identity records and provenance metadata so joins do not rely on display names.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - DB schema includes canonical keys (`serviceId`, `serviceName`, `namespace`, `env`, `appLabel`, optional `argoAppName`).
+  - Uniqueness constraints prevent duplicate service/env identity rows.
+  - Schema includes provenance/freshness fields (`source`, `lastSyncedAt`).
+- **Dependencies:** T4.4.1
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - Alembic migration added:
+    - `apps/portal/backend/alembic/versions/20260305_0002_create_service_registry_table.py`
+  - New `service_registry` schema includes canonical identity fields:
+    - `service_id`, `service_name`, `namespace`, `env`, `app_label`, optional `argo_app_name`
+  - Provenance/freshness fields included:
+    - `source`, `source_ref`, `last_synced_at`
+  - Uniqueness and indexing constraints added:
+    - primary key on (`service_id`, `env`)
+    - unique constraint on (`service_name`, `namespace`, `env`)
+    - indexes on `env` and (`source`, `last_synced_at`)
+
+#### T4.6.2 Add registry sync pipeline from GitOps/cluster metadata
+- **Description:** Implement a sync job that reads GitOps/Argo/Kubernetes metadata and upserts canonical service registry rows.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Sync job populates registry without manual row creation.
+  - Job is idempotent and safe to rerun.
+  - Sync failures are logged with correlation context and metrics.
+- **Dependencies:** T4.6.1, T2.2.2
+- **Complexity:** L
+- **Risk:** Medium
+- **Evidence:**
+  - New sync pipeline module added:
+    - `apps/portal/backend/app/service_registry_sync.py`
+  - Sync reads cluster metadata from Kubernetes Deployments and Argo CD Applications:
+    - in-cluster API calls to `apps/v1` Deployments and `argoproj.io/v1alpha1` Applications
+  - Idempotent upsert implemented via `ON CONFLICT (service_id, env) DO UPDATE`:
+    - maintains canonical fields and updates `last_synced_at`/`updated_at`
+  - Admin-triggered sync endpoint added:
+    - `POST /service-registry/sync` in `apps/portal/backend/app/main.py`
+  - Scripted job entrypoint added:
+    - `apps/portal/backend/scripts/sync_service_registry.py`
+  - Sync failures logged with correlation context and summarized metrics:
+    - response fields include `correlationId`, `inserted`, `updated`, `sourceFailures`, `durationMs`
+  - Tests added for record derivation, normalization, and source-failure behavior:
+    - `apps/portal/backend/tests/test_service_registry_sync.py`
+  - Validation runbook added:
+    - `docs/runbooks/service-registry-sync-pipeline.md`
+
+#### T4.6.3 Remove request-time project seeding and seeded defaults
+- **Description:** Eliminate `DEFAULT_PROJECTS` and `_seed_projects_if_empty` behavior from backend request paths.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - `GET /api/projects` no longer inserts seeded/default rows on read.
+  - Empty data state is returned explicitly when no registry rows exist.
+  - Existing tests updated to assert no implicit seed behavior.
+- **Dependencies:** T4.6.1
+- **Complexity:** S
+- **Risk:** Low
+- **Evidence:**
+  - Removed request-time seed constants/helpers from backend:
+    - `DEFAULT_PROJECTS` and `_seed_projects_if_empty` deleted from `apps/portal/backend/app/main.py`
+  - `/projects` read path no longer performs writes:
+    - `GET /projects` now only runs `SELECT id, name, environment FROM projects`
+  - Release project-row loading path no longer triggers seeding:
+    - `_load_project_rows()` now reads existing rows only
+  - Test coverage added for no-seed-on-read behavior:
+    - `test_projects_list_does_not_seed_defaults_on_read` in `apps/portal/backend/tests/test_api.py`
+
+#### T4.6.4 Rewire `/projects` to canonical registry projection
+- **Description:** Serve `/projects` from canonical registry projection rows instead of mixed/manual project labels.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - `/api/projects` rows map deterministically to canonical `serviceId` identities.
+  - Row shape remains backward-compatible for current frontend consumers.
+  - Projection exposes env-scoped rows suitable for release and monitoring joins.
+- **Dependencies:** T4.6.1, T4.6.2, T4.6.3
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - `/projects` now reads from canonical registry projection:
+    - `SELECT service_id, service_name, env FROM service_registry` in `apps/portal/backend/app/main.py`
+  - Response shape remains backward-compatible for existing frontend adapters:
+    - returns `{ id, name, environment }` mapped from canonical fields
+  - Release join seed input now also uses canonical identity rows:
+    - `_load_project_rows()` reads `service_id` and `env` from `service_registry`
+  - `POST /projects` now upserts canonical service identity rows (manual source):
+    - writes into `service_registry` with deterministic `service_id` normalization
+  - Tests updated for canonical projection path:
+    - `test_projects_list_does_not_seed_defaults_on_read`
+    - `test_create_project_normalizes_to_canonical_service_id`
+    - both in `apps/portal/backend/tests/test_api.py`
+
+#### T4.6.5 Canonical release join in backend traceability pipeline
+- **Description:** Ensure `/api/releases` and related backend joins use canonical service IDs from registry projection.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Release rows map to canonical `serviceId` values used by metrics/logs routes.
+  - Join mismatch diagnostics include explicit key details (`serviceId|serviceName|env`).
+  - Unknown upstream values remain explicit instead of silently remapped.
+- **Dependencies:** T4.4.6, T4.6.4
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - Release join now anchors output keys to canonical registry projection rows:
+    - `build_release_traceability_rows()` iterates registry-derived `project_rows` only in `apps/portal/backend/app/release_traceability.py`
+  - Canonical matching supports upstream rows keyed by canonical `serviceId` or registry `service_name`:
+    - fallback matching added for `serviceId == service_name` and normalized-id lookup
+  - Join mismatch diagnostics logged with explicit `serviceId|serviceName|env` key details:
+    - `release_join_mismatch source=... key=<serviceId>|<serviceName>|<env> reason=missing_registry_mapping`
+  - Unknown upstream values remain explicit (`unknown`), not remapped silently:
+    - normalization behavior retained for Argo sync/health when missing/invalid
+  - Canonical join tests added:
+    - `test_build_release_rows_maps_upstream_service_name_to_canonical_service_id`
+    - `test_build_release_rows_logs_unmatched_upstream_keys`
+    - in `apps/portal/backend/tests/test_release_traceability.py`
+
+#### T4.6.6 Backfill/migration plan for existing project rows
+- **Description:** Provide a one-time migration path from legacy project labels (human-readable) to canonical service IDs.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Migration script maps existing rows and produces a diff/report.
+  - Script supports dry-run and rollback instructions.
+  - Validation confirms frontend links and adapter joins remain stable post-migration.
+- **Dependencies:** T4.6.4
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - One-time migration script added:
+    - `apps/portal/backend/scripts/migrate_projects_to_service_registry.py`
+  - Script reads legacy `projects`, maps to canonical `service_registry`, and emits per-row diff/report:
+    - includes `legacyProjectId`, canonical `serviceId`, `mappingRule`, `changedFields`
+  - Dry-run supported by default, apply via explicit flag:
+    - dry-run: `python scripts/migrate_projects_to_service_registry.py`
+    - apply: `python scripts/migrate_projects_to_service_registry.py --apply`
+  - Rollback SQL generation supported (preview + optional file output):
+    - `--rollback-file /path/to/rollback.sql`
+  - Mapping and plan logic isolated and unit-tested:
+    - `apps/portal/backend/app/projects_backfill.py`
+    - `apps/portal/backend/tests/test_projects_backfill.py`
+  - Migration + validation runbook added:
+    - `docs/runbooks/projects-backfill-migration.md`
+
+#### T4.6.7 Registry freshness and mismatch diagnostics endpoint
+- **Description:** Add backend diagnostics surface for registry freshness, sync health, and join mismatch counts.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Endpoint or health payload includes registry freshness (`lastSyncedAt`) and mismatch counters.
+  - Diagnostic output is consumable by runbooks and smoke checks.
+  - Stale registry condition is clearly distinguishable from empty registry.
+- **Dependencies:** T4.6.2, T4.6.5
+- **Complexity:** S
+- **Risk:** Low
+- **Evidence:**
+  - New diagnostics endpoint added:
+    - `GET /service-registry/diagnostics` in `apps/portal/backend/app/main.py`
+  - Endpoint freshness payload includes:
+    - `rowCount`, `lastSyncedAt`, `staleAfterMinutes`, `isEmpty`, `isStale`, `state`
+  - Stale vs empty distinction implemented:
+    - `state=empty` when registry has zero rows
+    - `state=stale` when rows exist but `lastSyncedAt` is missing/older than threshold
+  - Join mismatch counters/keys exposed from canonical release join diagnostics:
+    - `ciUnmatchedCount`, `argoUnmatchedCount`, `ciUnmatchedKeys`, `argoUnmatchedKeys`
+    - keys formatted as `serviceId|serviceName|env`
+  - Mismatch diagnostics helper added:
+    - `build_release_join_diagnostics()` in `apps/portal/backend/app/release_traceability.py`
+  - Tests added for endpoint and join diagnostics:
+    - `apps/portal/backend/tests/test_api.py`
+    - `apps/portal/backend/tests/test_release_traceability.py`
+  - Runbook added for smoke checks:
+    - `docs/runbooks/service-registry-diagnostics.md`
+
+#### T4.6.8 Validation runbook and smoke checks for project-source cutover
+- **Description:** Add explicit validation for `/projects` live-source cutover and canonical join integrity.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Runbook includes scripted and manual checks for project source, releases, and service-route consistency.
+  - Smoke checks fail when seeded/default project rows are detected.
+  - Evidence captures before/after behavior in dev cluster.
+- **Dependencies:** T4.6.3, T4.6.4, T4.6.5
+- **Complexity:** S
+- **Risk:** Low
+- **Evidence:**
+  - New cutover smoke script added:
+    - `apps/portal/backend/scripts/project_source_cutover_smoke.py`
+  - Script validates:
+    - `/projects` canonical row shape and no seeded/default legacy rows
+    - `/releases` join integrity against `/projects` keys (`serviceId|env`)
+    - service-route consistency via `/services/:serviceId/metrics/summary`
+  - Smoke fails on seeded/default legacy markers:
+    - legacy IDs (`proj*`, `proj-dev`, `proj-prod`) and legacy name (`Homelab App`)
+  - Validation runbook added:
+    - `docs/runbooks/project-source-cutover-validation.md`
+  - Dev-cluster before/after behavior captured during migration validation:
+    - initial migration apply failed with unique conflict on `(service_name, namespace, env)=(Allowed, default, dev)`
+    - rerun after `update_rekey` fix showed plan with `update_rekey` actions and `applied: true`
+    - backend test suite passed after fixes (`62 passed`)
+
 ---
 
 ### E5.1 Multi-environment GitOps structure
@@ -1441,6 +1832,17 @@ Before beginning Portal Level 3 work, your platform must demonstrate:
 
 Attempting Level 3 before these gates will result in rework and operational toil.
 
+### Level 3 Render-Like Readiness Checklist
+
+- [ ] Deployment records persist for every deploy/promote/rollback/config-change action (`T6.6.1`, `T6.6.2`).
+- [ ] Deploy status lifecycle is visible as `pending` → `deploying` → `live`/`failed` (`T6.6.2`, `T6.6.3`, `T6.2.4`).
+- [ ] Post-merge rollout verification is automatic and updates deployment results (`T6.6.3`).
+- [ ] Deploy-scoped logs and metrics are visible around each deploy window (`T6.7.1`, `T6.7.2`, `T6.7.3`).
+- [ ] Canonical service identity is enforced across portal, Argo CD, Kubernetes labels, Prometheus, Loki, and release joins (`T6.4.4`, `T6.6.5`).
+- [ ] Deploy locks prevent overlapping mutations per `serviceId+env` (`T6.6.4`, `T6.2.4`).
+- [ ] Rollback from portal remains available and traceable (`T6.2.3`, `T6.2.4`, `T6.6.2`).
+- [ ] Portal shows deploy history timeline with deploy reason and changelog context (`T6.2.4`, `T6.2.5`, `T6.7.2`).
+
 ---
 
 ## Phase 6 (Month 4–5): GitOps Write Workflows & Self-Service (Portal Level 3)
@@ -1454,6 +1856,8 @@ Attempting Level 3 before these gates will result in rework and operational toil
 - E6.3 Configuration and secrets management workflows
 - E6.4 Service scaffolding and registration (minimal MVP)
 - E6.5 Multi-user access control and audit (optional later)
+- E6.6 Deployment records, rollout verification, and deploy safety controls
+- E6.7 Deploy-scoped observability and deploy timeline UX
 
 ---
 
@@ -1524,56 +1928,65 @@ Attempting Level 3 before these gates will result in rework and operational toil
   1. Fetches latest image tag from registry (or uses last N tags from CI artifact).
   2. Creates feature branch from dev overlay.
   3. Modifies kustomization patch to bump image tag in dev only.
-  4. Commits and opens PR with title "Deploy {service}: {new_tag} to dev".
-  5. Returns PR URL and status.
+  4. Requires `deploy_reason` text and captures changelog context (`compare_url`, `previous_tag`, `new_tag`) in request metadata.
+  5. Commits and opens PR with title "Deploy {service}: {new_tag} to dev".
+  6. Creates a deployment record (`action_type=deploy`, `status=pending`) and returns PR URL + deployment ID.
 - **Status:** TODO
 - **Acceptance Criteria:**
   - Endpoint requires auth (logged-in user).
   - PR diff shows only image tag change in dev kustomize patch.
+  - Request enforces non-empty deploy reason and stores previous→new version plus commit compare link.
   - Argo CD auto-syncs after merge (if Image Updater auto-sync enabled) or manual sync works.
   - PR can be merged without conflict.
   - Rollback behavior: closing PR without merge leaves dev unchanged.
-- **Dependencies:** T6.1.2, T1.2.3 (app deployed), T2.1.1 (CI publishes images)
+- **Dependencies:** T6.1.2, T1.2.3 (app deployed), T2.1.1 (CI publishes images), T6.6.2
 - **Complexity:** M
 - **Risk:** High
 - **Notes:** Use semantic versioning tag or git-sha convention. Handle case where latest tag already in dev (return 204 or info message).
+- **Change Note:** Extended to require deploy reason/changelog context and to create deployment records as first-class objects.
 
 #### T6.2.2 Portal API: "Promote dev → prod" endpoint
 - **Description:** `POST /api/services/{service_id}/promote-to-prod` endpoint that:
   1. Reads current image tag from dev overlay (already deployed).
   2. Creates feature branch from prod overlay.
   3. Modifies prod kustomize patch to match dev tag.
-  4. Commits and opens PR with title "Promote {service}: {tag} to prod".
-  5. Returns PR URL (user approves/merges in GitHub).
+  4. Requires `deploy_reason` text and captures changelog context (`compare_url`, `previous_tag`, `new_tag`) in request metadata.
+  5. Commits and opens PR with title "Promote {service}: {tag} to prod".
+  6. Creates a deployment record (`action_type=promote`, `status=pending`) and returns PR URL + deployment ID.
 - **Status:** TODO
 - **Acceptance Criteria:**
   - Promotion PR contains only prod patch change.
   - Promotion copies the exact tag from dev (no manual override yet).
+  - Request enforces non-empty deploy reason and stores previous→new version plus commit compare link.
   - PR can be merged without conflict.
   - Merged promotion triggers Argo sync and deployment to prod.
   - Anti-pattern check: promotion of uncommitted/test tags blocked (tag must exist in registry).
-- **Dependencies:** T6.2.1, T6.1.2
+- **Dependencies:** T6.2.1, T6.1.2, T6.6.2
 - **Complexity:** M
 - **Risk:** High
 - **Notes:** Later enhancement: gated promotion (approvals, policy checks). For MVP: user merges PR in GitHub.
+- **Change Note:** Extended to persist promotion deployment records and deploy reason/changelog context.
 
 #### T6.2.3 Portal API: "Rollback to previous tag" endpoint
 - **Description:** `POST /api/services/{service_id}/rollback` endpoint that:
   1. Reads current deployed tag from specified env overlay.
   2. Fetches previous 5 image tags from registry (or Git commit history of patch file).
   3. Allows user to select target tag.
-  4. Creates PR bumping image tag back to target.
-  5. User merges; Argo re-syncs.
+  4. Requires `deploy_reason` text and captures changelog context (`compare_url`, `previous_tag`, `new_tag`) in request metadata.
+  5. Creates PR bumping image tag back to target.
+  6. Creates a deployment record (`action_type=rollback`, `status=pending`) and returns PR URL + deployment ID.
 - **Status:** TODO
 - **Acceptance Criteria:**
   - At least 5 previous tags available for selection.
   - Rollback PR contains only tag change.
+  - Request enforces non-empty rollback reason and stores previous→new version plus commit compare link.
   - Rollback tested end-to-end once (deploy version N, deploy N+1, rollback to N, confirm N running).
   - Rollback does not modify any other deployments.
-- **Dependencies:** T6.2.1, T6.1.2
+- **Dependencies:** T6.2.1, T6.1.2, T6.6.2
 - **Complexity:** M
 - **Risk:** Medium
 - **Notes:** Integrate with container registry API (GHCR, Harbor) to list tags with dates. Provide UI confirmation before generating PR.
+- **Change Note:** Extended to make rollback a first-class deployment record with required operator reason/changelog context.
 
 #### T6.2.4 Portal UI: Deploy & promote controls
 - **Description:** Add buttons/modals to service detail page:
@@ -1583,27 +1996,31 @@ Attempting Level 3 before these gates will result in rework and operational toil
   - Each button shows: current deployed tag, latest available tag, PR status (open/merged).
 - **Status:** TODO
 - **Acceptance Criteria:**
-  - Buttons disabled if deploy already in progress (PR open).
+  - Buttons disabled if deploy lock exists for the selected `serviceId+env` or if a deployment is in `pending/deploying`.
   - PR links clickable and open in new tab.
   - Toast shows success/error with clear message.
   - UI shows previous 3 deployed tags inline.
-- **Dependencies:** T6.2.1, T6.2.2, T6.2.3, T1.6.2 (service detail page)
+  - UI shows deployment status badges (`pending`, `deploying`, `live`, `failed`) and exposes deploy reason/changelog context per row.
+- **Dependencies:** T6.2.1, T6.2.2, T6.2.3, T1.6.2 (service detail page), T6.6.2, T6.6.4, T6.7.2
 - **Complexity:** M
 - **Risk:** Low
 - **Notes:** Show PR state (open, merged, closed) with color badges; auto-refresh every 30s to detect merge.
+- **Change Note:** Expanded from simple button UX to deployment-status-aware controls with lock awareness and timeline context.
 
 #### T6.2.5 Release traceability: link deployments to commits and images
-- **Description:** Enhance Argo Application status annotation to include deployed commit SHA and image tag. Store in Argo Application `status.summary.images` and display in portal UI. Add metadata endpoint `GET /api/services/{service_id}/deployment-info` that returns: {deployed_image, image_digest, git_commit, deployed_timestamp, pr_link}.
+- **Description:** Enhance release traceability by linking deployment records to commit/image/PR metadata and Argo rollout outcomes. Add metadata endpoint `GET /api/services/{service_id}/deployment-info` that returns: `{deployment_id, deployed_image, previous_image, image_digest, git_commit, deployed_timestamp, pr_link, compare_url, deploy_reason, result, result_reason}`.
 - **Status:** TODO
 - **Acceptance Criteria:**
   - Argo Application has custom annotations: `image-tag`, `commit-sha`, `deployed-at`.
   - Portal displays these in service detail → "Deploy Info" card.
   - Commit SHA links to GitHub commit; image tag links to registry.
-  - pr_link field pulls from Argo Application label (set by CI or manual comment).
-- **Dependencies:** T6.2.1, T1.6.2
+  - pr_link and merge SHA are persisted to deployment record after PR merge.
+  - compare link and deploy reason are shown in deploy timeline/history UI.
+- **Dependencies:** T6.2.1, T1.6.2, T6.6.2, T6.6.3
 - **Complexity:** M
 - **Risk:** Medium
 - **Notes:** Metadata initially populated via PR merge event (GitHub Actions comment on Argo Application manifest); later automate via Argo Notification or custom controller.
+- **Change Note:** Scope expanded from Argo-only annotation view to canonical deployment-record traceability.
 
 ---
 
@@ -1760,9 +2177,12 @@ Attempting Level 3 before these gates will result in rework and operational toil
   - All currently deployed services (homelab-api, homelab-web, etc.) registered.
   - service-name lookup returns all metadata needed for deploy/promote/config workflows.
   - Portal uses this as service directory (search, filter, list).
-- **Dependencies:** T6.4.1, T1.2.3 (services exist)
+  - Canonical identity mapping is explicit and validated for every env: `serviceId`, `argo_app`, `namespace`, `app.kubernetes.io/name`, `app.kubernetes.io/instance`, `env`.
+  - Registry metadata is sufficient to build Prometheus/Loki selectors and release/deployment joins without manual aliasing.
+- **Dependencies:** T6.4.1, T1.2.3 (services exist), T4.4.1
 - **Complexity:** S
 - **Risk:** Low
+- **Change Note:** Extended to enforce canonical service identity fields and label conventions across platform integrations.
 
 ---
 
@@ -1808,6 +2228,167 @@ Attempting Level 3 before these gates will result in rework and operational toil
 
 ---
 
+### E6.6 Deployment records, rollout verification, and deploy safety controls
+
+#### T6.6.1 Deployment records database schema and migrations
+- **Description:** Add a first-class `deployments` table in the portal backend database. Minimum schema:
+  - `deployment_id`
+  - `service_id`
+  - `env`
+  - `action_type` (`deploy`, `promote`, `rollback`, `config-change`)
+  - `requested_by`
+  - `requested_at`
+  - `pr_url`
+  - `pr_number`
+  - `merge_sha`
+  - `target_image`
+  - `previous_image`
+  - `argo_app`
+  - `sync_status`
+  - `health_status`
+  - `started_at`
+  - `finished_at`
+  - `result`
+  - `result_reason`
+  - `deploy_window_start`
+  - `deploy_window_end`
+  - `deploy_reason`
+  - `compare_url`
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Alembic migration creates `deployments` table with indexes on `service_id`, `env`, `requested_at`, and `result`.
+  - Enum constraints enforce allowed `action_type` and lifecycle status values.
+  - Backfill script can map recent release rows into deployment records without data loss.
+  - Retention policy for deployment records is documented (minimum 180 days).
+- **Dependencies:** T1.2.2, T6.2.1
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T6.6.2 Deployment records API and workflow integration
+- **Description:** Implement backend APIs and workflow hooks so every deploy/promote/rollback/config-change creates and updates a deployment record. Add endpoints:
+  - `GET /api/services/{service_id}/deployments?env=&limit=`
+  - `GET /api/deployments/{deployment_id}`
+  - `POST /api/deployments/{deployment_id}/cancel` (optional soft-cancel before merge)
+  - Internal workflow method to transition status lifecycle.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Deployment status lifecycle is enforced as `pending`, `deploying`, `live`, `failed`.
+  - T6.2.1/T6.2.2/T6.2.3 and config-change workflows create records before PR open.
+  - Record updates include PR metadata, merge SHA, rollout timestamps, result, and result reason.
+  - Service deployment history endpoint returns deterministic ordering and pagination.
+- **Dependencies:** T6.6.1, T6.2.1, T6.2.2, T6.2.3, T6.3.1
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T6.6.3 Rollout watcher after PR merge (Argo + Kubernetes verification)
+- **Description:** Implement a rollout watcher worker that, after PR merge detection, verifies rollout outcome by polling Argo CD Application status and Kubernetes rollout status, then updates deployment records.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Merge detection links PR number/merge SHA to exactly one deployment record.
+  - Watcher polls Argo sync/health and Kubernetes rollout progression for target workload.
+  - Status transitions follow `pending` → `deploying` → `live`/`failed`; timeout marks `failed` with explicit reason.
+  - Optional GitHub PR comment posts deployment result summary with deployment ID and portal link.
+- **Dependencies:** T6.6.2, T2.2.2, T4.4.6
+- **Complexity:** L
+- **Risk:** High
+
+#### T6.6.4 Deploy lock manager (service+env mutex)
+- **Description:** Add deploy locks so only one active mutation per `service_id + env` can run at a time across deploy/promote/rollback/config changes.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Lock table or lock records are stored in backend DB and include owner, action type, and lock timestamp.
+  - API rejects overlapping mutation requests with stable conflict response payload.
+  - Portal UI disables conflicting action buttons when lock is active.
+  - Lock release is guaranteed on success/failure/timeout paths; stale lock cleanup job exists.
+- **Dependencies:** T6.6.1, T6.6.2, T6.2.4
+- **Complexity:** M
+- **Risk:** High
+
+#### T6.6.5 Canonical service identity enforcement and validation
+- **Description:** Enforce canonical `serviceId` identity and label conventions across portal registry, Argo CD apps, Kubernetes labels, Prometheus selectors, Loki selectors, and release/deployment joins.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Canonical mapping is validated for every registered service/env:
+    - `serviceId` (portal/backend key)
+    - `app.kubernetes.io/name`
+    - `app.kubernetes.io/instance`
+    - `env`
+    - `argo_app`
+  - Validation script fails CI when required labels/identity mappings are missing or inconsistent.
+  - Monitoring and release query builders consume canonical identity fields only (no ad-hoc aliases).
+  - Smoke-check runbook documents identity validation against at least 2 live services.
+- **Dependencies:** T6.4.4, T4.4.1, T4.6.5
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T6.6.6 OPTIONAL: Preview environment GitOps workflow (PR-based)
+- **Description:** Optional capability to create ephemeral preview environments per PR via Git changes only. Workflow opens Git PR adding preview namespace/app overlay, Argo reconciles it, and portal surfaces preview URL.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Preview env is created from a PR-scoped overlay/namespace naming convention (`preview-<pr-number>`).
+  - Portal shows preview URL and environment state as clearly non-production.
+  - Preview creation follows same deployment record model (`action_type=deploy`, `env=preview-*`).
+  - No direct kubectl mutations are performed by portal.
+- **Dependencies:** T6.1.2, T6.6.2, T6.4.4
+- **Complexity:** L
+- **Risk:** Medium
+
+#### T6.6.7 OPTIONAL: Preview environment lifecycle cleanup
+- **Description:** Optional follow-up to auto-clean preview environments when source PR closes/merges by creating Git cleanup PRs that remove preview overlays and namespace manifests.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - PR close/merge event triggers cleanup workflow that removes preview manifests via Git PR.
+  - Cleanup has TTL safety net for abandoned previews.
+  - Portal marks preview as expired/cleaned and preserves deployment history record.
+  - Cleanup failures are surfaced in portal and runbook with retry path.
+- **Dependencies:** T6.6.6, T6.6.3
+- **Complexity:** M
+- **Risk:** Medium
+
+---
+
+### E6.7 Deploy-scoped observability and deploy timeline UX
+
+#### T6.7.1 Backend deploy-window observability aggregation endpoint
+- **Description:** Add backend endpoint to aggregate telemetry scoped to a deployment window using existing Prometheus/Loki data:
+  - `GET /api/deployments/{deployment_id}/observability`
+  - Returns logs window links and metric deltas: error-rate before/after, latency before/after, restart spikes, availability impact.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Endpoint computes before/after windows from `deploy_window_start` and `deploy_window_end`.
+  - Uses only existing observability stack integrations (Prometheus, Loki, Grafana links).
+  - Missing telemetry returns explicit partial-data fields without failing full response.
+  - Response includes query context for reproducibility/debugging.
+- **Dependencies:** T6.6.2, T4.4.2, T4.4.8, T4.4.12
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T6.7.2 Portal deploy history timeline (deploy records as first-class UX)
+- **Description:** Replace mocked/adapter-only deployment history with deployment-record-backed timeline on `/services/:serviceId/deployments` and service overview preview.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Timeline rows are sourced from deployment records API (not mock rows).
+  - Each row shows action type, status, requested by/at, PR link, merge SHA, previous→new version, deploy reason, and compare link.
+  - Row drill-down opens deploy-scoped logs/metrics panel for that deployment.
+  - UI highlights failed deployments and supports filtering by result/action/env.
+- **Dependencies:** T6.6.2, T6.2.4, T1.6.4, T4.5.2
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T6.7.3 Deploy impact summary and regression highlighting
+- **Description:** Extend deployment history and service detail to show deploy impact summaries (error-rate delta, latency delta, restart spikes, availability impact) and emphasize regressions immediately after deploy.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Deploy rows include before/after indicators with explicit unavailable state when telemetry windows are missing.
+  - Services list/detail highlight recent deployments with negative deltas using shared severity semantics.
+  - Regression thresholds are configurable and documented in runbook.
+  - Existing monitoring links still deep-link to Grafana/Loki for full investigation.
+- **Dependencies:** T6.7.1, T4.3.7, T4.3.8
+- **Complexity:** M
+- **Risk:** Medium
+
+---
+
 ## Sequencing and dependencies for Portal Level 3
 
 ### Implementation order by epic
@@ -1815,21 +2396,30 @@ Attempting Level 3 before these gates will result in rework and operational toil
 1. **Start E6.1 (Git integration)** once Phase 2 and 3 are stable (CI proven, secrets in place).
    - T6.1.1 → T6.1.2 → T6.1.3 → T6.1.4 (do all before moving to E6.2).
 
-2. **Proceed with E6.2 (Deploy/promote/rollback)** immediately after E6.1.
+2. **Implement E6.6 core first (deployment records + rollout verification + locks).**
+   - T6.6.1 → T6.6.2 → T6.6.3 → T6.6.4 → T6.6.5.
+   - **Checkpoint:** Deployment records persist and transition `pending/deploying/live/failed`.
+   - **Checkpoint:** Post-merge rollout watcher updates result and reason.
+
+3. **Proceed with E6.2 (Deploy/promote/rollback)** after E6.6 core exists.
    - T6.2.1 → T6.2.2 → T6.2.3 → T6.2.4 → T6.2.5.
    - **Checkpoint:** First deploy PR works end-to-end.
    - **Checkpoint:** Promotion works at least once.
    - **Checkpoint:** Rollback tested and verified.
 
-3. **Parallel E6.3 (Config/secrets)** after E6.2 basics (T6.2.1–T6.2.4) are working.
+4. **Parallel E6.3 (Config/secrets)** after E6.2 basics (T6.2.1–T6.2.4) are working.
    - T6.3.1 → T6.3.2 → T6.3.3 → T6.3.4.
    - **Checkpoint:** Config edit PR created and merged; env var applied to pod.
    - **Checkpoint:** Secret edit PR created; secret decrypts and applies (manual verification).
 
-4. **Begin E6.4 (Service scaffolding)** after >3 services running and deploy/promote proven stable (2–3 weeks into Level 3).
+5. **Implement E6.7 (deploy-scoped observability)** after deployment records and rollout statuses are live.
+   - T6.7.1 → T6.7.2 → T6.7.3.
+   - **Checkpoint:** Deploy timeline includes logs/metrics context and before/after deltas.
+
+6. **Begin E6.4 (Service scaffolding)** after >3 services running and deploy/promote proven stable (2–3 weeks into Level 3).
    - T6.4.1 → T6.4.2 → T6.4.4 → T6.4.3 (portal UI only after manual scaffolding proven).
 
-5. **E6.5 (Multi-user + audit)** only after E6.2/E6.3 prove stable and if adding more users.
+7. **E6.5 (Multi-user + audit)** only after E6.2/E6.3/E6.6 prove stable and if adding more users.
    - T6.5.1 → T6.5.2 → T6.5.3.
    - **Do not do E6.5 for a solo engineer initially.**
 
@@ -1838,6 +2428,7 @@ Attempting Level 3 before these gates will result in rework and operational toil
 Do not attempt E6.2 or E6.3 until you have successfully:
 - Expected readiness gates passed (above).
 - Completed T6.1.1–T6.1.4 (Git integration tested with dry runs).
+- Completed T6.6.1–T6.6.3 (deployment record persistence + rollout verification core).
 - Tested Git provider token with at least one manual PR (not via portal, just verify token works).
 
 Attempting Level 3 before these checkpoints will result in Git-based outages and rework.
@@ -1864,7 +2455,7 @@ Explicitly NOT included in this phase:
 Assumption: Phase 2–5 readiness gates are already met.
 
 ### Month 1 of Level 3 (Weeks 1–4)
-**Goal:** Prove PR-based deploy workflow.
+**Goal:** Establish deployment records + prove PR-based deploy workflow.
 
 - **Week 1:** Complete E6.1 (Git integration foundation).
   - T6.1.1 → ADR done.
@@ -1872,22 +2463,25 @@ Assumption: Phase 2–5 readiness gates are already met.
   - T6.1.3 → Token provisioned and rotated into secret.
   - ~12–15 hours.
 
-- **Week 2:** Start E6.2.
-  - T6.2.1 → Deploy-to-dev endpoint works, opens PR, can be merged.
-  - T6.2.4 → UI button added, tested manually.
-  - Checkpoint: First deploy PR from portal created and merged; service restarts successfully.
+- **Week 2:** Build E6.6 core foundation.
+  - T6.6.1 → Deployment records schema/migration live.
+  - T6.6.2 → Deployment records API + status lifecycle live.
+  - T6.6.3 → Rollout watcher updates deployment outcome after merge.
+  - Checkpoint: deployment status transitions `pending` → `deploying` → `live/failed` are visible.
   - ~10–12 hours.
 
 - **Week 3–4:** Complete core E6.2.
+  - T6.2.1 → Deploy-to-dev endpoint works with deploy reason/changelog capture.
   - T6.2.2 → Promote-to-prod endpoint works.
   - T6.2.3 → Rollback endpoint works.
-  - T6.2.5 → Traceability annotations added (minimal version).
-  - End-to-end test: dev deploy → promote → rollback all work.
-  - Checkpoint: Full deploy/promote/rollback workflow end-to-end tested.
+  - T6.2.4 + T6.6.4 → UI controls + deploy locks prevent overlapping mutations.
+  - T6.2.5 → Deployment traceability card linked to deployment records.
+  - End-to-end test: dev deploy → promote → rollback with rollout verification and persisted deployment history.
+  - Checkpoint: Full deploy/promote/rollback workflow with traceability is end-to-end tested.
   - ~15–18 hours.
 
 ### Month 2 of Level 3 (Weeks 5–8)
-**Goal:** Config/secrets workflows + stabilize.
+**Goal:** Config/secrets workflows + deploy-scoped observability.
 
 - **Week 5:** E6.3.1–T6.3.2.
   - T6.3.1 → Config edit endpoint.
@@ -1904,9 +2498,10 @@ Assumption: Phase 2–5 readiness gates are already met.
   - Edge case testing: concurrent edits, rollback mid-edit, token expiry.
   - ~8–10 hours.
 
-- **Week 8:** Ops & runbook.
-  - Document Level 3 workflows: how to deploy, promote, rollback, edit config.
-  - Incident playbooks: "PR merge failed", "token expired", "conflict on promote".
+- **Week 8:** E6.7 observability timeline + runbooks.
+  - T6.7.1 → Deploy-window observability endpoint.
+  - T6.7.2/T6.7.3 → Deploy timeline UI with before/after deltas and regression highlighting.
+  - Incident playbooks: "PR merged but rollout failed", "deploy lock stuck", "post-deploy error spike".
   - ~6–8 hours.
 
 ### Month 3 of Level 3 (Weeks 9–12)
@@ -1931,17 +2526,17 @@ Assumption: Phase 2–5 readiness gates are already met.
   - ~4–6 hours.
 
 ### Estimated total Level 3 effort
-- Month 1: 35–45 hours (Git integration + core deploy/promote/rollback).
-- Month 2: 40–50 hours (Config/secrets + stabilization).
+- Month 1: 40–50 hours (Git integration + deployment records + core deploy/promote/rollback).
+- Month 2: 38–48 hours (Config/secrets + deploy-scoped observability + stabilization).
 - Month 3: 27–34 hours (Service scaffolding + evaluation).
-- **Total: 100–130 hours (~10–12 hours/week for 10 weeks).**
+- **Total: 105–132 hours (~10–12 hours/week for 10+ weeks).**
 
 If solo engineering at evenings/weekends (5–8 hours/week), extend by 1.5–2x (15–20 weeks for full Level 3).
 
 ### Checkpoints and decision gates
 
-- **After Month 1:** Can portal deploy to dev, merge PR, and restart pod? If YES, proceed to Month 2. If NO, iterate on E6.2 before moving forward.
-- **After Month 2:** Can operator edit config and secrets via portal? Are all changes Git-backed? If YES, proceed to scaffolding. If NO, address E6.3 gaps.
+- **After Month 1:** Do deployment records persist with rollout verification and can portal deploy/promote/rollback via PR? If YES, proceed to Month 2. If NO, iterate on E6.6/E6.2 before moving forward.
+- **After Month 2:** Can operator edit config/secrets and inspect deploy-scoped impact (logs/metrics deltas) for each deploy? If YES, proceed to scaffolding. If NO, address E6.3/E6.7 gaps.
 - **After Month 3:** Are >3 new services scaffolded and deployed? Is scaffolding repeatable in <30 min? If YES, move to production use. If NO, keep script maintenance as ongoing task.
 
 ---

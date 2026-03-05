@@ -16,8 +16,7 @@ Service detail page (`/services/:serviceId`) includes a compact health timeline 
 Load order for timeline data:
 
 1. `GET /api/services/{serviceId}/health-timeline?range={window}`
-2. local fallback file `apps/portal/frontend/service-health-timeline.sample.json`
-3. safe empty timeline state
+2. safe empty timeline state
 
 ## 3. Validation steps
 
@@ -35,7 +34,6 @@ Load order for timeline data:
 
 - Empty timeline:
   - check API response shape (`startAt`, `endAt`, `status`)
-  - verify fallback sample includes chosen `window`
 - All segments unknown:
   - verify status normalization accepts expected backend strings
 - Timeline unreadable on small screens:
@@ -46,4 +44,3 @@ Load order for timeline data:
 - `apps/portal/frontend/src/components/service-health-timeline.tsx`
 - `apps/portal/frontend/src/lib/adapters/service-health-timeline.ts`
 - `apps/portal/frontend/src/pages/service-details-page.tsx`
-- `apps/portal/frontend/service-health-timeline.sample.json`
