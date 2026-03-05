@@ -119,6 +119,7 @@ Recommended immediate relabeling:
 - E4.1 Metrics and dashboards (Prometheus + Grafana)
 - E4.2 Centralized logging (Loki preferred for homelab simplicity)
 - E4.3 Deployment, health, and change visibility
+- E4.4 Live monitoring data integration (Portal API + adapters)
 
 ---
 
@@ -867,15 +868,28 @@ Recommended immediate relabeling:
 
 ### E4.3 Portal Monitoring & Observability UX
 
+Scope: All tickets in this section implement monitoring visibility inside the
+React/Fast API Portal  (`apps/portal`). Infrastructure, Prometheus,
+and Grafana provisioning are handled in E4.1 and E4.2.
+
 #### T4.3.1 Build release dashboard (commits → image tags → Argo sync)
 - **Description:** Surface end-to-end delivery state for confidence and debugging.
-- **Status:** TODO
+- **Status:** DONE (2026-03-04)
 - **Acceptance Criteria:**
   - Dashboard links commit SHA to deployed image and sync status.
   - Drift detection visible.
 - **Dependencies:** T2.2.2, T4.1.1
 - **Complexity:** L
 - **Risk:** Medium
+- **Evidence:**
+  - Portal dashboard implementation now renders release traceability rows with commit SHA, deployed image, Argo sync/health, drift state, and deployment timestamp:
+    - `apps/portal/frontend/src/pages/dashboard-page.tsx`
+  - Release dashboard adapter added with API-first + fallback loading and drift computation:
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+  - Fallback sample dataset with commit/image/Argo metadata added:
+    - `apps/portal/frontend/release-dashboard.sample.json`
+  - Validation runbook added:
+    - `docs/runbooks/release-traceability-dashboard.md`
 
 #### T4.3.2 Service metrics summary cards on service detail page
 - **Description:** Add summary cards to each service page for uptime %, p95 latency, error rate, and restart count, using existing service identity metadata.
@@ -912,7 +926,7 @@ Recommended immediate relabeling:
 
 #### T4.3.5 Template-driven monitoring URL builder (Grafana + Loki)
 - **Description:** Extend frontend URL templating so monitoring links can inject variables (service, namespace, environment, range) without hardcoded page-specific logic.
-- **Status:** TODO
+- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
 - **Acceptance Criteria:**
   - URL template helper supports variable interpolation for Grafana and Loki routes.
   - Service detail and logs entry points use shared template helper.
@@ -920,6 +934,9 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.6.5, T1.6.6
 - **Complexity:** S
 - **Risk:** Low
+- **Overlap Notes:**
+  - Implemented: shared template interpolation and URL builders exist in `apps/portal/frontend/src/lib/config.ts` and are used by service-detail quick links.
+  - Remaining: explicit development-time warnings/fallback behavior for missing template variables.
 
 #### T4.3.6 Service health timeline (status-over-time)
 - **Description:** Add a compact timeline view on the service page to visualize health transitions (healthy, degraded, down) over time.
@@ -945,7 +962,7 @@ Recommended immediate relabeling:
 
 #### T4.3.8 Unhealthy deployment and degraded service highlighting
 - **Description:** Add frontend detection rules to flag suspicious deployments and propagate degraded badges to service list and detail views.
-- **Status:** TODO
+- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
 - **Acceptance Criteria:**
   - Rule set identifies unhealthy deployments using configurable thresholds (for example error spike or readiness drop).
   - Service list and service detail views show consistent degraded badge treatment.
@@ -953,10 +970,13 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.6.1, T1.6.3, T1.6.4, T4.3.7
 - **Complexity:** M
 - **Risk:** Medium
+- **Overlap Notes:**
+  - Implemented: degraded/unknown status badges already render in services and service-detail views.
+  - Remaining: threshold-based unhealthy deployment detection rules and test-covered alerting helper.
 
 #### T4.3.9 Logs quick-view panel on service detail
 - **Description:** Add a service-level logs quick-view drawer with prebuilt Loki queries and one-click deep links for full investigation in Grafana.
-- **Status:** TODO
+- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
 - **Acceptance Criteria:**
   - Service detail page includes "View logs" action that opens an inline quick-view panel.
   - Panel provides at least three prebuilt query shortcuts (errors, restarts, recent warnings) scoped to service label/namespace.
@@ -964,6 +984,9 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.6.2, T1.6.5, T4.2.1, T4.3.5
 - **Complexity:** M
 - **Risk:** Medium
+- **Overlap Notes:**
+  - Implemented: service detail page already provides Grafana/Loki deep link generation with service/namespace/range templating.
+  - Remaining: inline quick-view panel and preset shortcuts (errors/restarts/warnings).
 
 #### T4.3.10 Platform health page in portal UI
 - **Description:** Create a dedicated portal page aggregating platform-wide service health, alert counts, and top active incidents from monitoring adapters.
@@ -986,6 +1009,158 @@ Recommended immediate relabeling:
 - **Dependencies:** T1.6.1, T1.6.3, T4.3.10
 - **Complexity:** S
 - **Risk:** Low
+
+### E4.4 Live Monitoring Data Integration
+
+Scope: Replace sample/mock monitoring data in the Portal with bounded, live
+backend endpoints and shared service identity joins across Argo, Prometheus,
+Loki, and registry metadata.
+
+#### T4.4.1 Define service identity contract for monitoring joins
+- **Description:** Standardize how the portal identifies a service across Argo, Prometheus, Loki, and the portal registry (name, namespace, app label, environment).
+- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
+- **Acceptance Criteria:**
+  - A single `ServiceIdentity` shape is defined and used across monitoring APIs and frontend adapters (fields include `serviceId`, `serviceName`, `namespace`, `env`, `appLabel`, optional `argoAppName`).
+  - Frontend services adapter provides (or can derive) the required identity fields for all service rows and service detail routes.
+  - Contract documented in `docs/contracts/service-identity.md` with examples for at least 2 services and 2 environments.
+- **Dependencies:** T1.6.7, T1.6.5, T1.6.6
+- **Complexity:** S
+- **Risk:** Medium
+- **Overlap Notes:**
+  - Implemented: service registry adapter already carries partial identity fields (`id/name/environments` with optional `namespace` and `appLabel`).
+  - Remaining: canonical `ServiceIdentity` contract, backend/frontend-wide adoption, and contract documentation.
+
+#### T4.4.2 Backend API: service metrics summary endpoint (uptime, p95, error rate, restarts)
+- **Description:** Implement a backend endpoint to return live summary metrics for a given service identity and time range, backed by Prometheus queries.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `GET /api/services/:serviceId/metrics/summary?range=24h` returns `{ uptimePct, p95LatencyMs, errorRatePct, restartCount, windowStart, windowEnd, generatedAt }`.
+  - Query range supports at least `1h`, `24h`, `7d` with server-side validation.
+  - Endpoint returns explicit `noData: true` per metric where applicable rather than failing the full response.
+  - Non-200 Prometheus responses are translated into stable API errors with correlation IDs in logs.
+- **Dependencies:** T4.1.1, T1.2.1, T4.3.2
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.4.3 Frontend: replace metrics-card mocks with live summary endpoint
+- **Description:** Wire T4.3.2 metric cards to `GET /api/services/:serviceId/metrics/summary` with loading, stale, and partial no-data handling.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Service detail page metric cards fetch live data on load and on time-range change.
+  - Cards show last refreshed timestamp (from `generatedAt`) and a stale indicator if older than a configurable threshold.
+  - Partial no-data renders per-card No data without shifting layout.
+  - Errors render a non-blocking inline error state with retry.
+- **Dependencies:** T4.3.2, T4.4.2
+- **Complexity:** S
+- **Risk:** Low
+
+#### T4.4.4 Backend API: service health timeline endpoint (status over time)
+- **Description:** Provide a backend endpoint that returns a compact status timeline (healthy/degraded/down/unknown segments) for a service over a selected window, computed from Prometheus signals (availability + error rate + readiness).
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `GET /api/services/:serviceId/health/timeline?range=24h&step=5m` returns an array of `{ start, end, status, reason? }`.
+  - Status mapping rules are configurable (thresholds in config file or env vars) and documented.
+  - Endpoint supports at least `24h` and `7d` windows with bounded step sizes.
+  - Unit tests cover status mapping for healthy/degraded/down/unknown.
+- **Dependencies:** T4.4.1, T4.1.1, T4.3.6
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.4.5 Frontend: wire service health timeline to live timeline endpoint
+- **Description:** Replace timeline mock/placeholder logic with the live backend timeline endpoint and add step/range selectors.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `/services/:serviceId` timeline renders live segments for default `24h`.
+  - Range selector supports `24h` and `7d`; step auto-adjusts appropriately.
+  - Segment hover shows exact timestamps and reason when present.
+  - Timeline remains responsive and legible on mobile widths.
+- **Dependencies:** T4.3.6, T4.4.4
+- **Complexity:** S
+- **Risk:** Low
+
+#### T4.4.6 Backend API: release traceability endpoint (commit → image → Argo state → drift)
+- **Description:** Replace sample-based release dashboard with live data by implementing a backend endpoint that aggregates CI/build metadata, deployed image, and Argo sync/health per service/environment.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `GET /api/releases?env=dev&limit=50` returns rows including `{ serviceId, env, commitSha, imageRef, deployedAt, argo: { appName, syncStatus, healthStatus, revision }, drift: { isDrifted, expectedRevision, liveRevision } }`.
+  - Drift is computed in a deterministic way and documented (what constitutes drift).
+  - Endpoint supports server-side filtering by `serviceId` and `env`.
+  - Missing upstream data yields explicit unknown fields; endpoint still returns rows.
+- **Dependencies:** T4.3.1, T4.4.1, T4.1.1
+- **Complexity:** L
+- **Risk:** Medium
+
+#### T4.4.7 Frontend: switch release dashboard adapter from sample to live endpoint
+- **Description:** Update `apps/portal/frontend/src/lib/adapters/release-dashboard.ts` to call the live releases endpoint and keep sample JSON only as an offline/dev fallback.
+- **Status:** IN PROGRESS (PARTIAL, 2026-03-04)
+- **Acceptance Criteria:**
+  - Dashboard uses live endpoint by default and shows Live indicator when data source is API.
+  - Sample JSON is only used when API is unreachable (dev mode) or behind an explicit feature flag.
+  - Row links (commit/image/Argo) use live values and remain stable across refresh.
+- **Dependencies:** T4.3.1, T4.4.6
+- **Complexity:** S
+- **Risk:** Low
+- **Overlap Notes:**
+  - Implemented: adapter is API-first with fallback (`/api/release-dashboard` -> `/api/projects` -> sample JSON), and dashboard already renders live row links when present.
+  - Remaining: switch to `/api/releases`, expose explicit data-source indicator, and restrict sample fallback to dev-mode/feature-flag policy.
+
+#### T4.4.8 Backend API: logs query endpoint for quick-view (Loki proxy, scoped)
+- **Description:** Enable the service logs quick-view panel by adding a backend endpoint that executes a small set of safe, templated Loki queries (errors/restarts/warnings) for a service identity and time range.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `GET /api/services/:serviceId/logs/quickview?preset=errors&range=1h` returns a bounded list of log lines with timestamps and labels.
+  - Only approved query presets are supported (no arbitrary query execution from the client).
+  - Responses are capped (for example max lines) with pagination token support or more-available indicator.
+  - Endpoint enforces auth and rate limits (basic in-memory is acceptable for MVP).
+- **Dependencies:** T4.2.1, T4.3.9, T4.4.1
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.4.9 Frontend: connect logs quick-view panel to live Loki quick-view endpoint
+- **Description:** Replace any mocked log preview with live data from `GET /api/services/:serviceId/logs/quickview` while keeping deep links for full Grafana exploration.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Quick-view panel loads logs for at least 3 presets (`errors`, `restarts`, `warnings`) with range selector.
+  - Loading, empty, and error states are non-blocking and keep deep link usable.
+  - Open full logs deep link preserves equivalent query context and time range.
+- **Dependencies:** T4.3.9, T4.4.8, T4.3.5
+- **Complexity:** S
+- **Risk:** Low
+
+#### T4.4.10 Backend API: active alerts feed endpoint (for platform page + global banner)
+- **Description:** Provide a backend endpoint to expose current active alerts (from Prometheus/Alertmanager) mapped to portal severities and optionally to services.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `GET /api/alerts/active` returns an array with `{ id, severity, title, description?, startsAt, labels, serviceId?, env? }`.
+  - Severity mapping (`warning`/`critical`) is consistent with frontend badge styles and documented.
+  - Endpoint supports filtering by `env` and optionally `serviceId`.
+  - Partial failures degrade gracefully (returns empty + error metadata rather than hard fail where possible).
+- **Dependencies:** T4.1.2, T4.3.10, T4.3.11
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.4.11 Frontend: wire platform health page and incident banner to live alerts feed
+- **Description:** Use `GET /api/alerts/active` to power the platform health page alert feed and the global incident banner + per-service badges.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Platform health page shows alert list with severity, start time, and links to relevant services (when mapped).
+  - Global banner appears when active alerts exceed configured severity threshold.
+  - Banner dismissal persists per session and does not hide critical alerts.
+- **Dependencies:** T4.3.10, T4.3.11, T4.4.10
+- **Complexity:** M
+- **Risk:** Low
+
+#### T4.4.12 Observability config hardening: query templates, limits, caching
+- **Description:** Add config knobs for ranges, limits, caching TTLs, and query templates so live monitoring endpoints are safe and stable under frequent portal refresh.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Backend monitoring endpoints implement caching (per service + range) with configurable TTL.
+  - All endpoints enforce sane bounds (max range, max step resolution, max rows/log lines).
+  - Query templates and thresholds are centralized and documented (`docs/monitoring/query-templates.md`).
+  - Basic load test script or documented manual test verifies endpoints under repeated refresh.
+- **Dependencies:** T4.4.2, T4.4.4, T4.4.8, T4.4.10
+- **Complexity:** M
+- **Risk:** Medium
 
 ---
 
