@@ -1182,7 +1182,7 @@ Loki, and registry metadata.
 
 #### T4.4.4 Backend API: service health timeline endpoint (status over time)
 - **Description:** Provide a backend endpoint that returns a compact status timeline (healthy/degraded/down/unknown segments) for a service over a selected window, computed from Prometheus signals (availability + error rate + readiness).
-- **Status:** TODO
+- **Status:** DONE (2026-03-05)
 - **Acceptance Criteria:**
   - `GET /api/services/:serviceId/health/timeline?range=24h&step=5m` returns an array of `{ start, end, status, reason? }`.
   - Status mapping rules are configurable (thresholds in config file or env vars) and documented.
@@ -1191,6 +1191,20 @@ Loki, and registry metadata.
 - **Dependencies:** T4.4.1, T4.1.1, T4.3.6
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - New backend timeline endpoint implemented:
+    - `apps/portal/backend/app/main.py` (`GET /services/{serviceId}/health/timeline`)
+  - Endpoint supports `range=24h|7d` with bounded `step` validation and compact segment output shape `{ start, end, status, reason? }`.
+  - Status mapping extracted into configurable helper module with env-driven thresholds:
+    - `apps/portal/backend/app/health_timeline.py`
+  - Threshold configuration documented in backend README:
+    - `apps/portal/backend/README.md`
+  - Unit tests added for healthy/degraded/down/unknown mapping:
+    - `apps/portal/backend/tests/test_health_timeline.py`
+  - API tests added for timeline endpoint shape and step validation:
+    - `apps/portal/backend/tests/test_api.py`
+  - Validation runbook added:
+    - `docs/runbooks/service-health-timeline-endpoint.md`
 
 #### T4.4.5 Frontend: wire service health timeline to live timeline endpoint
 - **Description:** Replace timeline mock/placeholder logic with the live backend timeline endpoint and add step/range selectors.
