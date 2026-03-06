@@ -7,27 +7,26 @@ Last updated: 2026-03-06
 Observed against `http://api.dev.homelab.local` on 2026-03-06:
 
 - API process is healthy: `GET /health` returns `200 {"status":"ok"}`.
-- `/projects`, `/services`, `/releases`, and `/release-dashboard` return empty payloads.
-- `POST /service-registry/sync?source=gitops_apps&env=dev` reports `GitOps workloads repo path does not exist`.
-- `POST /service-registry/sync?source=cluster_services&env=dev` reports upstream connection failures to Kubernetes and Argo CD.
-- `GET /health?includeProviders=true` reports all monitoring providers degraded/unreachable.
-- Metrics and timeline endpoints return structured `502` responses for Prometheus reachability failures.
-- `GET /alerts/active` degrades to `200` with empty alerts and `providerStatus.status="unreachable"`.
-- Loki quickview returns structured `502` with `provider="loki"` and `status="unreachable"`.
+- `/projects` returns GitOps-backed rows for `homelab-api` and `homelab-web`.
+- `/services` returns cluster-backed rows and `/service-registry/diagnostics` reports `freshness.state="fresh"`.
+- `POST /service-registry/sync?source=gitops_apps&env=dev` returns discovered/upserted rows with no `sourceFailures`.
+- `POST /service-registry/sync?source=cluster_services&env=dev` returns discovered/upserted rows with no `sourceFailures`.
+- `GET /monitoring/providers/diagnostics` reports `prometheus`, `loki`, and `alertmanager` all `healthy`.
+- `GET /alerts/active` and `GET /monitoring/incidents` return healthy `providerStatus`.
 
-The portal UI is therefore up, but most live data contracts are still blocked by missing in-cluster source connectivity.
+The portal UI is now backed by live project, service, and monitoring sources. Remaining work is verification, UI rebaseline, and cleanup.
 
 ## Priority
 
-1. Restore GitOps project sync in-cluster.
-2. Restore live service registry sync from Kubernetes and Argo CD.
-3. Restore monitoring provider reachability.
-4. Re-run end-to-end validation and remove stale/empty catalog state.
+1. Verify the scheduled catalog-sync CronJob stays green.
+2. Re-run end-to-end validation and capture fresh dev evidence.
+3. Rebaseline UI state against live data.
+4. Remove stale/manual registry artifacts.
 
 ## Tickets
 
 ### P0.1 Mount or fetch GitOps workloads repo for project sync
-- **Status:** IN PROGRESS (code complete, awaiting cluster validation)
+- **Status:** DONE (2026-03-06)
 - **Problem:** GitOps project sync runs in-cluster, but the backend and catalog-sync job do not have access to the `workloads/` repo contents. `/projects` stays empty.
 - **Evidence:** `POST /service-registry/sync?source=gitops_apps&env=dev` returns `sourceFailures[0].error = "GitOps workloads repo path does not exist"`.
 - **Acceptance Criteria:**
@@ -42,7 +41,7 @@ The portal UI is therefore up, but most live data contracts are still blocked by
 - **Risk:** Medium
 
 ### P0.2 Fix in-cluster service registry sync connectivity
-- **Status:** IN PROGRESS (RBAC and API-server egress patch staged, awaiting cluster validation)
+- **Status:** DONE (2026-03-06)
 - **Problem:** Live service discovery cannot reach its upstreams, so `/services` remains empty and registry freshness is stale.
 - **Evidence:** `POST /service-registry/sync?source=cluster_services&env=dev` reports 5 source failures, including Kubernetes API and Argo CD connection errors.
 - **Acceptance Criteria:**
@@ -58,7 +57,7 @@ The portal UI is therefore up, but most live data contracts are still blocked by
 - **Risk:** High
 
 ### P0.3 Restore Prometheus reachability from the API pod
-- **Status:** IN PROGRESS (Prometheus service-name and egress patch staged, awaiting cluster validation)
+- **Status:** DONE (2026-03-06)
 - **Problem:** Metrics endpoints fail because Prometheus is unreachable from the backend.
 - **Evidence:** `GET /services/homelab-api/metrics/summary?range=24h` and `GET /services/homelab-api/metrics-summary?range=24h` return structured `502` with `provider="prometheus"` and `error="[Errno -2] Name or service not known"`.
 - **Root Cause:** Backend defaulted to `prometheus.monitoring.svc.cluster.local`, but this monitoring stack expects `prometheus-operated.monitoring.svc.cluster.local`; `homelab-api` also needs explicit egress to `monitoring` on port `9090`.
@@ -73,10 +72,10 @@ The portal UI is therefore up, but most live data contracts are still blocked by
 - **Risk:** Medium
 
 ### P0.4 Restore Alertmanager reachability from the API pod
-- **Status:** IN PROGRESS (dev monitoring stack patch staged, awaiting cluster validation)
+- **Status:** DONE (2026-03-06)
 - **Problem:** Alerts endpoint degrades gracefully, but cannot reach Alertmanager.
-- **Evidence:** `GET /alerts/active?env=dev&serviceId=homelab-api&limit=50` returns `200` with `alerts=[]` and `providerStatus.status="unreachable"`, `error="[Errno -2] Name or service not known"`.
-- **Root Cause:** Dev `kube-prometheus-stack` currently sets `alertmanager.enabled=false`, so `alertmanager-operated.monitoring.svc.cluster.local` does not exist.
+- **Evidence:** Earlier `GET /alerts/active?env=dev&serviceId=homelab-api&limit=50` returned `providerStatus.status="unreachable"` and later narrowed to `Connection refused` on `9093`.
+- **Root Cause:** Dev `kube-prometheus-stack` needed `alertmanager.enabled=true`, and `homelab-api` also needed explicit egress to the `monitoring` namespace on port `9093`.
 - **Acceptance Criteria:**
   - `GET /monitoring/providers/diagnostics` reports Alertmanager `status="healthy"` in dev.
   - `GET /alerts/active` returns a healthy `providerStatus`.
@@ -84,7 +83,7 @@ The portal UI is therefore up, but most live data contracts are still blocked by
 - **Risk:** Medium
 
 ### P0.5 Restore Loki reachability from the API pod
-- **Status:** IN PROGRESS (API-to-monitoring egress patch staged, awaiting cluster validation)
+- **Status:** DONE (2026-03-06)
 - **Problem:** Logs quickview cannot connect to Loki.
 - **Evidence:** `GET /services/homelab-api/logs/quickview?...` returns structured `502` with `provider="loki"` and `error="[Errno 111] Connection refused"`.
 - **Root Cause:** `homelab-api` runs under default-deny egress and had no allow rule to the `monitoring` namespace on Loki port `3100`.
@@ -95,9 +94,9 @@ The portal UI is therefore up, but most live data contracts are still blocked by
 - **Risk:** Medium
 
 ### P1.1 Verify catalog-sync CronJob end-to-end and alert on failure
-- **Status:** TODO
+- **Status:** IN PROGRESS (log signal and runbooks updated; latest scheduled green run still needs explicit capture)
 - **Problem:** The job packaging and image wiring were fixed, but the scheduled sync path still needs a successful end-to-end run in dev.
-- **Evidence:** Earlier failures included placeholder images and missing `/app/scripts/sync_catalog_registries.py`; this path was fixed on 2026-03-06 but not yet validated as green in-cluster.
+- **Evidence:** Earlier failures included placeholder images, missing `/app/scripts/sync_catalog_registries.py`, missing GitOps repo access, missing Kubernetes API `6443` egress, and missing Alertmanager `9093` egress. Manual sync and live API validation are now green on 2026-03-06, but the latest scheduled CronJob success still needs to be captured as evidence.
 - **Acceptance Criteria:**
   - Latest `homelab-api-catalog-sync` Job completes successfully.
   - Job logs show both `gitops_apps` and `cluster_services` summaries.

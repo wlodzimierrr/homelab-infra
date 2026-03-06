@@ -81,6 +81,7 @@ In cluster, the backend CronJob runs every 10 minutes:
 
 - manifest: `workloads/apps/homelab-api/base/catalog-sync-cronjob.yaml`
 - command: `python scripts/sync_catalog_registries.py`
+- success log lines: `catalog_sync_source_result ...` and `catalog_sync_run_result ...`
 
 Troubleshooting commands:
 

@@ -66,4 +66,5 @@ The in-cluster scheduler runs the combined catalog sync every 10 minutes:
 
 - manifest: `workloads/apps/homelab-api/base/catalog-sync-cronjob.yaml`
 - output: JSON summary including both `gitops_apps` and `cluster_services`
+- log lines: `catalog_sync_source_result ...` and `catalog_sync_run_result ...`
 - failure behavior: CronJob exits non-zero when either source reports `sourceFailures`

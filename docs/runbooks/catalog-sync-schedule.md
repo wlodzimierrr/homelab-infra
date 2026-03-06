@@ -82,6 +82,27 @@ curl -sS -H 'Authorization: Bearer dev-static-token' \
 - `freshness.state=warning`: sync is aging and should refresh before SLO breach
 - `freshness.state=stale`: scheduled sync is blocked or not running
 
+Expected log shape for a healthy run:
+
+```text
+catalog_sync_source_result env=dev source=gitops_apps correlation_id=<uuid> discovered=2 upserted=2 inserted=0 updated=2 deleted=0 failures=0 duration_ms=<n>
+catalog_sync_source_result env=dev source=cluster_services correlation_id=<uuid> discovered=4 upserted=3 inserted=0 updated=3 deleted=0 failures=0 duration_ms=<n>
+catalog_sync_run_result env=dev has_failures=False exit_code=0 gitops_failures=0 cluster_failures=0 gitops_correlation_id=<uuid> cluster_correlation_id=<uuid>
+```
+
+Expected failure signals:
+
+- `catalog_sync_run_result ... has_failures=True exit_code=1`
+- `catalog_sync_run_error ...` when the job fails before source summaries are generated
+- source-specific backend logs such as `service_registry_sync_source_error ...`
+
+Recommended checks for alerting/triage:
+
+```bash
+kubectl -n homelab-api logs job/<latest-catalog-sync-job> | rg 'catalog_sync_(source_result|run_result|run_error)|service_registry_sync_source_error'
+kubectl -n homelab-api get jobs --sort-by=.metadata.creationTimestamp | tail -n 3
+```
+
 ## Evidence Files
 
 - `workloads/apps/homelab-api/base/catalog-sync-cronjob.yaml`
