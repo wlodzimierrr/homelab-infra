@@ -48,6 +48,15 @@ curl -sS -X POST -H 'Authorization: Bearer dev-static-token' http://api.dev.home
 curl -sS -X POST -H 'Authorization: Bearer dev-static-token' http://api.dev.homelab.local/service-registry/sync | jq
 ```
 
+## Services API Validation
+
+After a successful sync, confirm the live catalog is available through the backend:
+
+```bash
+curl -sS -H 'Authorization: Bearer dev-static-token' 'http://api.dev.homelab.local/services?env=dev' | jq
+curl -sS -H 'Authorization: Bearer dev-static-token' 'http://api.dev.homelab.local/services/homelab-api?env=dev' | jq
+```
+
 ## Source Failure Visibility
 
 If Kubernetes/Argo source queries fail, the sync should still return a response with:
@@ -55,4 +64,3 @@ If Kubernetes/Argo source queries fail, the sync should still return a response 
 - populated `correlationId`
 - non-empty `sourceFailures`
 - backend logs containing `service_registry_sync_source_error`
-

@@ -1780,6 +1780,183 @@ standardize a canonical, cluster-backed service registry model used by
 
 ---
 
+### E4.7 Live Catalog Convergence: GitOps Apps, Cluster Services, and Monitoring Readiness
+
+Scope: Make project/service data fully live and deterministic by sourcing projects
+from GitOps `apps/` definitions, services from cluster discovery, and exposing
+monitoring readiness so the dashboard reflects real operational state.
+
+#### T4.7.1 Define source-of-truth contract for Projects vs Services
+- **Description:** Formalize that Projects come from GitOps app definitions and Services come from live cluster resources, with explicit join keys and ownership boundaries.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - Contract documents canonical keys for both domains (`projectId`, `serviceId`, `env`, `namespace`, `appLabel`).
+  - `/projects` and `/services` ownership boundaries are explicit and non-overlapping.
+  - Contract includes mismatch/error semantics used by UI diagnostics.
+- **Dependencies:** T4.6.4, T4.6.5
+- **Complexity:** S
+- **Risk:** Low
+- **Contract:**
+  - Domain ownership:
+    - `GET /projects` is the canonical catalog of intended workloads declared in GitOps `apps/` definitions only (`source=gitops_apps`).
+    - `GET /services` is the canonical catalog of observed runtime workloads discovered from the live cluster only (`source=cluster_services`).
+    - `/projects` does not fabricate runtime health, endpoints, or deployment state from cluster reads.
+    - `/services` does not invent desired-state/project metadata from manual rows, seeded rows, or UI-only labels.
+  - Canonical keys and row shapes:
+    - `GET /projects` row shape: `{ projectId, projectName, env, namespace, appLabel, source, sourceRef, lastSyncedAt }`.
+    - `projectId` is the stable GitOps project identity for an app/env pair and remains immutable across syncs unless the GitOps definition itself is renamed.
+    - `GET /services` row shape: `{ serviceId, serviceName, env, namespace, appLabel, source, sourceRef, lastSyncedAt }`.
+    - `serviceId` is the stable runtime identity derived from normalized service metadata and is the canonical key used by service routes and monitoring joins.
+    - Shared fields across both domains are limited to `env`, `namespace`, and `appLabel`; those fields are join inputs, not proof of ownership transfer.
+  - Source references and freshness:
+    - `sourceRef` for `/projects` records the GitOps provenance (`repo@commit:path` or equivalent manifest reference).
+    - `sourceRef` for `/services` records the cluster provenance (`cluster/context:namespace/resourceName` or equivalent discovery reference).
+    - `lastSyncedAt` is required on both contracts and represents when that source projection was last refreshed, not when the workload was last deployed.
+  - Join contract:
+    - Primary join key: `env + namespace + appLabel`.
+    - Secondary fallback key: `env + serviceId` after normalization when `appLabel` is absent or inconsistent.
+    - Join results must be deterministic: the same source rows produce the same project-service mapping on repeated syncs.
+    - Diagnostic key format for unmatched or ambiguous rows: `serviceId|serviceName|env`.
+  - Mismatch semantics:
+    - `project_only`: GitOps project row exists with no matching live service row.
+    - `service_only`: live service row exists with no matching GitOps project row.
+    - `ambiguous_join`: more than one candidate row matches the join key and no deterministic winner exists.
+    - `key_conflict`: canonical keys disagree across sources for what appears to be the same workload.
+    - Mismatch records are exposed through diagnostics payloads and must not be silently patched by either endpoint.
+  - Error and degradation semantics used by UI diagnostics:
+    - `state=empty`: source reachable but zero rows.
+    - `state=stale`: source rows exist but freshness threshold exceeded.
+    - `state=degraded`: partial source failure or partial projection failure (for example cluster API read succeeds for some namespaces but not all, or GitOps manifest scan is incomplete).
+    - `state=auth_error`: upstream auth/session gate detected.
+    - `state=healthy`: source reachable, rows present when expected, and freshness threshold satisfied.
+  - API boundary guardrails:
+    - Canonical `/projects` responses exclude `source=manual` or seeded fallback rows by default.
+    - Canonical `/services` responses exclude synthetic adapter rows and sample JSON fallbacks in non-dev live mode.
+    - Any optional backfill/manual rows must remain explicitly tagged non-canonical and must not override GitOps or cluster-owned identities.
+- **Evidence:**
+  - Contract recorded in this roadmap section as the baseline for `T4.7.2` and `T4.7.3` implementation.
+  - Ownership boundaries align with completed canonical registry work in `T4.6.4`, diagnostics semantics in `T4.6.7`, and cutover validation in `T4.6.8`.
+  - Join keys and diagnostic key format are now explicit for frontend and backend consumers before live catalog convergence work proceeds.
+
+#### T4.7.2 Implement Projects sync from GitOps `apps/` source
+- **Description:** Replace manual/project-row drift by syncing project catalog from GitOps app manifests/repo paths.
+- **Status:** DONE (2026-03-05)
+- **Acceptance Criteria:**
+  - `/projects` rows are generated from GitOps `apps/` definitions for target env.
+  - Manual-only project rows are either rejected or explicitly tagged non-canonical.
+  - Sync is idempotent and records provenance (`source=gitops_apps`, `sourceRef`).
+- **Dependencies:** T4.7.1, T4.6.2
+- **Complexity:** M
+- **Risk:** Medium
+- **Validation/Evidence Checklist:**
+  - `curl /projects?env=dev` shows only canonical GitOps apps for target env.
+  - Re-running sync with unchanged repo commit yields `inserted=0` and stable row count.
+  - Changed app manifest name/namespace updates corresponding project row deterministically.
+  - Manual project create path behavior matches chosen guardrail and is explicitly tested.
+- **Evidence:**
+  - Dedicated GitOps-backed project projection added:
+    - `apps/portal/backend/alembic/versions/20260305_0003_create_project_registry_table.py`
+    - `apps/portal/backend/app/gitops_project_sync.py`
+    - `apps/portal/backend/scripts/sync_project_registry.py`
+  - `/projects` now reads canonical GitOps rows from `project_registry` and supports env filtering:
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/backend/openapi.json`
+  - Manual project creation is explicitly rejected with `409` because the catalog is GitOps-owned:
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/frontend/src/pages/projects-page.tsx`
+  - Admin sync entrypoint now supports GitOps project sync through the existing endpoint:
+    - `POST /service-registry/sync?source=gitops_apps&env=...`
+    - `apps/portal/backend/app/main.py`
+  - Test coverage and runbook added for GitOps sync:
+    - `apps/portal/backend/tests/test_gitops_project_sync.py`
+    - `apps/portal/backend/tests/test_service_registry_sync.py`
+    - `docs/runbooks/project-registry-sync-pipeline.md`
+
+#### T4.7.3 Implement Services sync from live cluster resources
+- **Description:** Build/extend service discovery to source `/services` from Kubernetes resources (Service/Deployment/labels) in the running cluster.
+- **Status:** DONE (2026-03-06)
+- **Acceptance Criteria:**
+  - `/services` returns live cluster-backed entries scoped by env/namespace.
+  - Service identity normalizes to canonical `serviceId` for joins.
+  - Missing/partial cluster metadata is surfaced as diagnostics, not fabricated rows.
+- **Dependencies:** T4.7.1, T4.6.2
+- **Complexity:** M
+- **Risk:** Medium
+- **Evidence:**
+  - Cluster sync now reads both Kubernetes `Service` and `Deployment` resources and normalizes canonical `serviceId` rows with `source=cluster_services`:
+    - `apps/portal/backend/app/service_registry_sync.py`
+  - Sync prunes stale service rows only for namespaces that were refreshed successfully, so partial namespace failures surface as diagnostics instead of deleting known-good rows:
+    - `apps/portal/backend/app/service_registry_sync.py`
+    - `docs/runbooks/service-registry-sync-pipeline.md`
+  - Live services API added:
+    - `GET /services?env=&namespace=`
+    - `GET /services/{serviceId}?env=`
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/backend/openapi.json`
+  - Frontend services adapter is now API-first for `/services` with `/projects` fallback retained for environments that have not enabled the service API yet:
+    - `apps/portal/frontend/src/lib/api.ts`
+    - `apps/portal/frontend/src/lib/adapters/services.ts`
+  - Test coverage added/updated for service discovery and API projection:
+    - `apps/portal/backend/tests/test_service_registry_sync.py`
+    - `apps/portal/backend/tests/test_api.py`
+
+#### T4.7.4 Canonical join bridge between GitOps Projects and cluster Services
+- **Description:** Add deterministic reconciliation between GitOps project identities and discovered cluster service identities.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Join logic supports one-to-one and one-to-many mappings with explicit keys.
+  - Unmatched project/service records are exposed via diagnostics endpoint payload.
+  - Dashboard links (`project -> service`, `service -> project`) remain stable.
+- **Dependencies:** T4.7.2, T4.7.3, T4.6.7
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.7.5 Monitoring provider readiness and connectivity hardening
+- **Description:** Ensure Prometheus/Loki/alerts queries are live and diagnosable so 502 provider failures are actionable and non-ambiguous.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Metrics/logs/alerts endpoints include structured provider status and correlation IDs on failure.
+  - Health/diagnostics expose provider reachability per backend (`prometheus`, `loki`, `alertmanager`).
+  - Runbook includes cluster checks for URL/auth/network-policy misconfiguration.
+- **Dependencies:** T4.4.2, T4.4.8, T4.4.10, T4.6.7
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.7.6 Dashboard contract: show live readiness, unknowns, and degraded states
+- **Description:** Update frontend contract so dashboard pages explicitly show live readiness for projects/services/monitoring instead of appearing empty or broken.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Projects and Services pages indicate source freshness and degradation state.
+  - Monitoring panels distinguish `upstream unknown`, `provider unreachable`, and `no data`.
+  - Route rendering remains non-blocking under partial outages.
+- **Dependencies:** T4.7.4, T4.7.5, T4.5.6
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T4.7.7 Scheduled sync and freshness SLO for live catalogs
+- **Description:** Add scheduled sync orchestration and freshness thresholds so live catalogs stay current without manual intervention.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Periodic sync job updates project/service registries on a defined interval.
+  - Freshness thresholds produce warnings before data becomes operationally stale.
+  - Sync metrics/logs allow troubleshooting failed runs in cluster.
+- **Dependencies:** T4.7.2, T4.7.3, T4.6.7
+- **Complexity:** S
+- **Risk:** Low
+
+#### T4.7.8 End-to-end validation suite for live projects/services/monitoring
+- **Description:** Add smoke checks that verify full live flow: GitOps apps -> projects, cluster services -> services, monitoring endpoints -> dashboard data.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Automated checks fail on legacy seeded project IDs and stale registry states.
+  - Checks validate `/projects`, `/services`, `/releases`, metrics summary, and alerts feed.
+  - Validation report captures before/after evidence in dev cluster.
+- **Dependencies:** T4.7.4, T4.7.5, T4.7.6
+- **Complexity:** M
+- **Risk:** Medium
+
+---
+
 ### E5.1 Multi-environment GitOps structure
 
 #### T5.1.1 Split environments with clear promotion contracts

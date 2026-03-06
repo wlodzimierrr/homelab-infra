@@ -65,7 +65,7 @@ Portal backend accepts oauth2-proxy identity headers:
 1. `X-Auth-Request-User`
 2. `X-Auth-Request-Groups`
 
-Admin actions (`POST /projects`) allow:
+Admin actions (`POST /service-registry/sync`) allow:
 
 1. Any user in `PORTAL_ADMIN_USERS` (default `admin`)
 2. Any group in `PORTAL_ADMIN_GROUPS` (default `team-admins`)
@@ -87,18 +87,16 @@ Portal auth and roles:
 
 ```bash
 curl -i http://portal.dev.homelab.local/
-curl -i -X POST http://portal.dev.homelab.local/api/projects \
+curl -i -X POST 'http://portal.dev.homelab.local/api/service-registry/sync?source=gitops_apps&env=dev' \
   -H 'X-Auth-Request-User: alice' \
-  -H 'X-Auth-Request-Groups: team-readers' \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"proj-check","name":"Check","environment":"dev"}'
+  -H 'X-Auth-Request-Groups: team-readers'
 ```
 
 Expected:
 
 1. Unauthenticated browser request redirects to oauth2-proxy login flow.
-2. Non-admin group receives `403` on project create.
-3. Admin group receives `201` on project create.
+2. Non-admin group receives `403` on catalog sync.
+3. Admin group receives `200` on catalog sync.
 
 ## 6. Break-glass
 
