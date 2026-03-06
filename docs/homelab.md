@@ -1902,7 +1902,7 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T4.7.4 Canonical join bridge between GitOps Projects and cluster Services
 - **Description:** Add deterministic reconciliation between GitOps project identities and discovered cluster service identities.
-- **Status:** TODO
+- **Status:** DONE (2026-03-06)
 - **Acceptance Criteria:**
   - Join logic supports one-to-one and one-to-many mappings with explicit keys.
   - Unmatched project/service records are exposed via diagnostics endpoint payload.
@@ -1910,6 +1910,22 @@ monitoring readiness so the dashboard reflects real operational state.
 - **Dependencies:** T4.7.2, T4.7.3, T4.6.7
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Deterministic catalog reconciliation helper added with primary-key join, fallback service-ID join, one-to-many handling, and unmatched/ambiguous diagnostics:
+    - `apps/portal/backend/app/catalog_reconciliation.py`
+    - `apps/portal/backend/tests/test_catalog_reconciliation.py`
+  - Reconciliation endpoint added for API consumers:
+    - `GET /catalog/reconciliation?env=&projectId=&serviceId=`
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/backend/openapi.json`
+  - `/service-registry/diagnostics` now includes catalog join diagnostics for `projectOnly`, `serviceOnly`, `oneToMany`, and `ambiguousJoin` states:
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/backend/tests/test_api.py`
+  - Frontend release dashboard now canonicalizes service routes through the reconciliation bridge before linking to `/services/:serviceId`:
+    - `apps/portal/frontend/src/lib/adapters/release-dashboard.ts`
+  - Frontend pages now expose stable cross-links:
+    - `project -> service` from `apps/portal/frontend/src/pages/projects-page.tsx`
+    - `service -> project` from `apps/portal/frontend/src/pages/services-page.tsx`
 
 #### T4.7.5 Monitoring provider readiness and connectivity hardening
 - **Description:** Ensure Prometheus/Loki/alerts queries are live and diagnosable so 502 provider failures are actionable and non-ambiguous.

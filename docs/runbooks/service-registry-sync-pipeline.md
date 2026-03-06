@@ -55,6 +55,8 @@ After a successful sync, confirm the live catalog is available through the backe
 ```bash
 curl -sS -H 'Authorization: Bearer dev-static-token' 'http://api.dev.homelab.local/services?env=dev' | jq
 curl -sS -H 'Authorization: Bearer dev-static-token' 'http://api.dev.homelab.local/services/homelab-api?env=dev' | jq
+curl -sS -H 'Authorization: Bearer dev-static-token' 'http://api.dev.homelab.local/catalog/reconciliation?env=dev' | jq
+curl -sS -H 'Authorization: Bearer dev-static-token' 'http://api.dev.homelab.local/service-registry/diagnostics?env=dev' | jq
 ```
 
 ## Source Failure Visibility
