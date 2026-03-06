@@ -34,7 +34,7 @@ Compatibility alias also exists:
 
 ## 3. Prometheus env configuration
 
-- `PROMETHEUS_BASE_URL` (default: `http://prometheus.monitoring.svc.cluster.local:9090`)
+- `PROMETHEUS_BASE_URL` (default: `http://prometheus-operated.monitoring.svc.cluster.local:9090`)
 - `PROMETHEUS_TIMEOUT_SECONDS` (default: `8`)
 
 ## 4. Evidence files

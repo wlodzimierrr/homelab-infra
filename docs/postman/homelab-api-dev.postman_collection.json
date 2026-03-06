@@ -1,0 +1,621 @@
+{
+  "info": {
+    "_postman_id": "f244305f-8fd0-4be2-9b10-88d8bf9cdb90",
+    "name": "Homelab API Dev",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Dev API checks for http://api.dev.homelab.local"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{bearerToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://api.dev.homelab.local"
+    },
+    {
+      "key": "bearerToken",
+      "value": "dev-static-token"
+    },
+    {
+      "key": "env",
+      "value": "dev"
+    },
+    {
+      "key": "serviceId",
+      "value": "homelab-api"
+    },
+    {
+      "key": "namespace",
+      "value": "homelab-api"
+    },
+    {
+      "key": "range",
+      "value": "24h"
+    },
+    {
+      "key": "step",
+      "value": "5m"
+    },
+    {
+      "key": "limit",
+      "value": "50"
+    }
+  ],
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Health With Providers",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health?includeProviders=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ],
+              "query": [
+                {
+                  "key": "includeProviders",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.access_token) {",
+                  "    pm.collectionVariables.set('bearerToken', body.access_token);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"changeme\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        {
+          "name": "Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects?env={{env}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Projects Diagnostics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/diagnostics?env={{env}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "diagnostics"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Services",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services?env={{env}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Service Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/{{serviceId}}?env={{env}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                "{{serviceId}}"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Catalog Reconciliation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/catalog/reconciliation?env={{env}}&projectId={{serviceId}}&serviceId={{serviceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalog",
+                "reconciliation"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                },
+                {
+                  "key": "projectId",
+                  "value": "{{serviceId}}"
+                },
+                {
+                  "key": "serviceId",
+                  "value": "{{serviceId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Service Registry Diagnostics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-registry/diagnostics?env={{env}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service-registry",
+                "diagnostics"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Trigger Cluster Sync",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-registry/sync?source=cluster_services&env={{env}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service-registry",
+                "sync"
+              ],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "cluster_services"
+                },
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Trigger GitOps Sync",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/service-registry/sync?source=gitops_apps&env={{env}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "service-registry",
+                "sync"
+              ],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "gitops_apps"
+                },
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Monitoring",
+      "item": [
+        {
+          "name": "Monitoring Provider Diagnostics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/monitoring/providers/diagnostics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "monitoring",
+                "providers",
+                "diagnostics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Service Metrics Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/{{serviceId}}/metrics/summary?range={{range}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                "{{serviceId}}",
+                "metrics",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "range",
+                  "value": "{{range}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Service Metrics Summary Legacy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/{{serviceId}}/metrics-summary?range={{range}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                "{{serviceId}}",
+                "metrics-summary"
+              ],
+              "query": [
+                {
+                  "key": "range",
+                  "value": "{{range}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Service Health Timeline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/{{serviceId}}/health/timeline?range={{range}}&step={{step}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                "{{serviceId}}",
+                "health",
+                "timeline"
+              ],
+              "query": [
+                {
+                  "key": "range",
+                  "value": "{{range}}"
+                },
+                {
+                  "key": "step",
+                  "value": "{{step}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Alerts Active",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/alerts/active?env={{env}}&serviceId={{serviceId}}&limit={{limit}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alerts",
+                "active"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                },
+                {
+                  "key": "serviceId",
+                  "value": "{{serviceId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Monitoring Incidents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/monitoring/incidents?env={{env}}&serviceId={{serviceId}}&limit={{limit}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "monitoring",
+                "incidents"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                },
+                {
+                  "key": "serviceId",
+                  "value": "{{serviceId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Service Logs Quickview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/{{serviceId}}/logs/quickview?preset=errors&range=1h&limit=100&namespace={{namespace}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "services",
+                "{{serviceId}}",
+                "logs",
+                "quickview"
+              ],
+              "query": [
+                {
+                  "key": "preset",
+                  "value": "errors"
+                },
+                {
+                  "key": "range",
+                  "value": "1h"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                },
+                {
+                  "key": "namespace",
+                  "value": "{{namespace}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Releases",
+      "item": [
+        {
+          "name": "Releases",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/releases?env={{env}}&serviceId={{serviceId}}&limit={{limit}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "releases"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                },
+                {
+                  "key": "serviceId",
+                  "value": "{{serviceId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Release Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/release-dashboard?env={{env}}&serviceId={{serviceId}}&limit={{limit}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "release-dashboard"
+              ],
+              "query": [
+                {
+                  "key": "env",
+                  "value": "{{env}}"
+                },
+                {
+                  "key": "serviceId",
+                  "value": "{{serviceId}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

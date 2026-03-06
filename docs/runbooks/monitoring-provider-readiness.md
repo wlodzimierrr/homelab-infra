@@ -58,10 +58,10 @@ kubectl -n monitoring get endpoints prometheus-operated alertmanager-operated
 3. From the backend pod, verify DNS and TCP reachability:
 
 ```bash
-kubectl -n homelab exec deploy/homelab-api -- getent hosts prometheus.monitoring.svc.cluster.local
+kubectl -n homelab exec deploy/homelab-api -- getent hosts prometheus-operated.monitoring.svc.cluster.local
 kubectl -n homelab exec deploy/homelab-api -- getent hosts loki.monitoring.svc.cluster.local
 kubectl -n homelab exec deploy/homelab-api -- getent hosts alertmanager-operated.monitoring.svc.cluster.local
-kubectl -n homelab exec deploy/homelab-api -- sh -lc 'nc -vz prometheus.monitoring.svc.cluster.local 9090'
+kubectl -n homelab exec deploy/homelab-api -- sh -lc 'nc -vz prometheus-operated.monitoring.svc.cluster.local 9090'
 kubectl -n homelab exec deploy/homelab-api -- sh -lc 'nc -vz loki.monitoring.svc.cluster.local 3100'
 kubectl -n homelab exec deploy/homelab-api -- sh -lc 'nc -vz alertmanager-operated.monitoring.svc.cluster.local 9093'
 ```
@@ -72,7 +72,7 @@ kubectl -n homelab exec deploy/homelab-api -- sh -lc 'nc -vz alertmanager-operat
 2. Probe readiness endpoints from inside the backend pod:
 
 ```bash
-kubectl -n homelab exec deploy/homelab-api -- sh -lc 'wget -qO- http://prometheus.monitoring.svc.cluster.local:9090/-/healthy'
+kubectl -n homelab exec deploy/homelab-api -- sh -lc 'wget -qO- http://prometheus-operated.monitoring.svc.cluster.local:9090/-/healthy'
 kubectl -n homelab exec deploy/homelab-api -- sh -lc 'wget -qO- http://loki.monitoring.svc.cluster.local:3100/ready'
 kubectl -n homelab exec deploy/homelab-api -- sh -lc 'wget -qO- http://alertmanager-operated.monitoring.svc.cluster.local:9093/-/ready'
 ```
