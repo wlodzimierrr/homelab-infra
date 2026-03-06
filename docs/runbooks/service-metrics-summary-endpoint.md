@@ -13,6 +13,7 @@ Returns:
 - `uptimePct`, `p95LatencyMs`, `errorRatePct`, `restartCount`
 - `windowStart`, `windowEnd`, `generatedAt`
 - `noData` flags per metric
+- `providerStatus` for Prometheus query readiness
 
 Compatibility alias also exists:
 
@@ -25,7 +26,11 @@ Compatibility alias also exists:
 3. Repeat with `range=1h` and `range=7d`.
 4. Call endpoint with invalid range (`range=2h`) and verify HTTP 422.
 5. Force empty Prometheus series (or query a non-existent service) and verify per-metric `noData` flags instead of full-request failure.
-6. Simulate Prometheus non-200 and verify backend returns stable HTTP 502 with `correlation_id` in error detail.
+6. Simulate Prometheus non-200 and verify backend returns stable HTTP 502 with structured error payload:
+   - `detail.message`
+   - `detail.correlationId`
+   - `detail.providerStatus.provider=prometheus`
+   - `detail.providerStatus.status=http_error|auth_error`
 
 ## 3. Prometheus env configuration
 

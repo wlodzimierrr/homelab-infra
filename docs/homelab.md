@@ -1929,7 +1929,7 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T4.7.5 Monitoring provider readiness and connectivity hardening
 - **Description:** Ensure Prometheus/Loki/alerts queries are live and diagnosable so 502 provider failures are actionable and non-ambiguous.
-- **Status:** TODO
+- **Status:** DONE (2026-03-06)
 - **Acceptance Criteria:**
   - Metrics/logs/alerts endpoints include structured provider status and correlation IDs on failure.
   - Health/diagnostics expose provider reachability per backend (`prometheus`, `loki`, `alertmanager`).
@@ -1937,10 +1937,30 @@ monitoring readiness so the dashboard reflects real operational state.
 - **Dependencies:** T4.4.2, T4.4.8, T4.4.10, T4.6.7
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Shared monitoring-provider contract added for readiness probes and structured failure payloads:
+    - `apps/portal/backend/app/monitoring_providers.py`
+  - Metrics, logs, and alerts endpoints now expose `providerStatus`, and 502 failures return structured `message`, `correlationId`, and provider metadata:
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/backend/tests/test_api.py`
+  - Provider reachability exposed through:
+    - `GET /health?includeProviders=true`
+    - `GET /monitoring/providers/diagnostics`
+    - `apps/portal/backend/openapi.json`
+  - Frontend API/error handling updated so structured monitoring failures render actionable messages and alerts consume the new envelope:
+    - `apps/portal/frontend/src/lib/api.ts`
+    - `apps/portal/frontend/src/lib/adapters/service-metrics.ts`
+    - `apps/portal/frontend/src/lib/adapters/logs-quickview.ts`
+    - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+  - Runbooks now cover provider diagnostics plus URL/auth/network-policy checks:
+    - `docs/runbooks/monitoring-provider-readiness.md`
+    - `docs/runbooks/service-metrics-summary-endpoint.md`
+    - `docs/runbooks/logs-quickview-endpoint.md`
+    - `docs/runbooks/active-alerts-endpoint.md`
 
 #### T4.7.6 Dashboard contract: show live readiness, unknowns, and degraded states
 - **Description:** Update frontend contract so dashboard pages explicitly show live readiness for projects/services/monitoring instead of appearing empty or broken.
-- **Status:** TODO
+- **Status:** DONE (2026-03-06)
 - **Acceptance Criteria:**
   - Projects and Services pages indicate source freshness and degradation state.
   - Monitoring panels distinguish `upstream unknown`, `provider unreachable`, and `no data`.
@@ -1948,6 +1968,25 @@ monitoring readiness so the dashboard reflects real operational state.
 - **Dependencies:** T4.7.4, T4.7.5, T4.5.6
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Added a project freshness/readiness surface via:
+    - `GET /projects/diagnostics?env=...`
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/backend/tests/test_api.py`
+    - `apps/portal/backend/openapi.json`
+  - Projects and Services pages now render source freshness, join drift, and partial-readiness warnings without blocking route rendering when secondary diagnostics fail:
+    - `apps/portal/frontend/src/pages/projects-page.tsx`
+    - `apps/portal/frontend/src/pages/services-page.tsx`
+    - `apps/portal/frontend/src/lib/api.ts`
+  - Platform health now surfaces provider readiness separately from incident/service state:
+    - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+    - `apps/portal/frontend/src/pages/platform-health-page.tsx`
+  - Service monitoring panels now distinguish provider failure, upstream-unknown state, and valid no-data responses:
+    - `apps/portal/frontend/src/pages/service-details-page.tsx`
+    - `apps/portal/frontend/src/lib/adapters/service-metrics.ts`
+    - `apps/portal/frontend/src/lib/adapters/logs-quickview.ts`
+  - Frontend live-data runbook updated for readiness/degradation verification:
+    - `docs/runbooks/strict-live-data-mode-frontend.md`
 
 #### T4.7.7 Scheduled sync and freshness SLO for live catalogs
 - **Description:** Add scheduled sync orchestration and freshness thresholds so live catalogs stay current without manual intervention.

@@ -14,6 +14,7 @@ Features:
 - bounded responses (`limit` max 200)
 - pagination support via `nextCursor`
 - `moreAvailable` indicator when additional data exists
+- `providerStatus` for Loki readiness/error context
 - auth required + basic in-memory rate limit
 
 ## 2. Parameters
@@ -30,9 +31,11 @@ Features:
 2. Verify HTTP 200 and response fields:
    - `lines[]` with `timestamp`, `message`, `labels`
    - `returned`, `limit`, `moreAvailable`, `nextCursor`
+   - `providerStatus.provider=loki`
 3. Call with invalid preset and verify HTTP 422.
 4. Call with `limit=1` and confirm `moreAvailable=true` and non-empty `nextCursor` when extra lines exist.
 5. Trigger rate-limit breach (`LOGS_QUICKVIEW_RATE_LIMIT_PER_MIN=1`) and verify second request returns HTTP 429.
+6. Simulate Loki non-200 and verify HTTP `502` with structured `detail.correlationId` and `detail.providerStatus`.
 
 ## 4. Config
 
