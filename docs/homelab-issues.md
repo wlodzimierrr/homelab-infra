@@ -13,6 +13,7 @@ Observed against `http://api.dev.homelab.local` on 2026-03-06:
 - `POST /service-registry/sync?source=cluster_services&env=dev` returns discovered/upserted rows with no `sourceFailures`.
 - `GET /monitoring/providers/diagnostics` reports `prometheus`, `loki`, and `alertmanager` all `healthy`.
 - `GET /alerts/active` and `GET /monitoring/incidents` return healthy `providerStatus`.
+- Latest scheduled `homelab-api-catalog-sync` Job completed successfully on 2026-03-06 and emitted `catalog_sync_source_result` / `catalog_sync_run_result` log lines for both `gitops_apps` and `cluster_services`.
 
 The portal UI is now backed by live project, service, and monitoring sources. Remaining work is verification, UI rebaseline, and cleanup.
 
@@ -94,9 +95,9 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Medium
 
 ### P1.1 Verify catalog-sync CronJob end-to-end and alert on failure
-- **Status:** IN PROGRESS (log signal and runbooks updated; latest scheduled green run still needs explicit capture)
+- **Status:** DONE (2026-03-06)
 - **Problem:** The job packaging and image wiring were fixed, but the scheduled sync path still needs a successful end-to-end run in dev.
-- **Evidence:** Earlier failures included placeholder images, missing `/app/scripts/sync_catalog_registries.py`, missing GitOps repo access, missing Kubernetes API `6443` egress, and missing Alertmanager `9093` egress. Manual sync and live API validation are now green on 2026-03-06, but the latest scheduled CronJob success still needs to be captured as evidence.
+- **Evidence:** Earlier failures included placeholder images, missing `/app/scripts/sync_catalog_registries.py`, missing GitOps repo access, missing Kubernetes API `6443` egress, and missing Alertmanager `9093` egress. The latest scheduled CronJob run `homelab-api-catalog-sync-29546770` completed successfully on 2026-03-06, and a manual validation run emitted `catalog_sync_source_result` for both `gitops_apps` and `cluster_services` plus `catalog_sync_run_result ... has_failures=False exit_code=0`.
 - **Acceptance Criteria:**
   - Latest `homelab-api-catalog-sync` Job completes successfully.
   - Job logs show both `gitops_apps` and `cluster_services` summaries.
@@ -105,8 +106,9 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Medium
 
 ### P1.2 Rebaseline portal empty-state diagnostics after source recovery
-- **Status:** TODO
+- **Status:** DONE (2026-03-06)
 - **Problem:** The frontend currently renders empty datasets correctly, but once sources recover we need to verify that degraded, warning, and fresh states are accurate and no stale fallback assumptions remain.
+- **Evidence:** Projects and services diagnostics now report `fresh`; monitoring providers report `healthy`; the frontend now treats `warning` as a first-class source state, surfaces project/service catalog freshness on the platform health page, and only falls back from `/services` to `/projects` when the live services endpoint is actually unavailable rather than when it merely returns empty or errors.
 - **Acceptance Criteria:**
   - Projects page shows GitOps-backed rows with accurate freshness state.
   - Services page shows cluster-backed rows with accurate freshness state.
@@ -115,8 +117,9 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Low
 
 ### P1.3 Re-run live validation suite and capture dev evidence
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-06)
 - **Problem:** The validation tooling exists, but current dev failures prevent a clean end-to-end report.
+- **Evidence:** `scripts/live_catalog_validation.py` now reaches the recovered live sources, but still fails on `GET /services/{serviceId}/metrics/summary?range=24h` against `http://api.dev.homelab.local`. Current live failure is a Prometheus `400 bad_data` surfaced as backend `502`, caused by the restart-count query escaping hyphenated app labels as `\\-`. A local backend fix and unit coverage are in place, but the live API must roll forward before the validation suite can pass and write the dated dev report artifact.
 - **Acceptance Criteria:**
   - `scripts/live_catalog_validation.py` passes against `http://api.dev.homelab.local`.
   - Validation report includes non-empty `/projects` and `/services`.
