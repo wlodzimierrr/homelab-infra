@@ -117,9 +117,9 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Low
 
 ### P1.3 Re-run live validation suite and capture dev evidence
-- **Status:** IN PROGRESS (2026-03-06)
+- **Status:** DONE (2026-03-06)
 - **Problem:** The validation tooling exists, but current dev failures prevent a clean end-to-end report.
-- **Evidence:** `scripts/live_catalog_validation.py` now reaches the recovered live sources, but still fails on `GET /services/{serviceId}/metrics/summary?range=24h` against `http://api.dev.homelab.local`. Current live failure is a Prometheus `400 bad_data` surfaced as backend `502`, caused by the restart-count query escaping hyphenated app labels as `\\-`. A local backend fix and unit coverage are in place, but the live API must roll forward before the validation suite can pass and write the dated dev report artifact.
+- **Evidence:** `scripts/live_catalog_validation.py` passed against `http://api.dev.homelab.local` on 2026-03-06 and wrote `/tmp/live-catalog-validation-dev-2026-03-06.json`. The resulting report showed `projects.count = 2`, `services.count = 3`, `releases.count = 2`, fresh project/service diagnostics, and healthy Prometheus plus Alertmanager provider status.
 - **Acceptance Criteria:**
   - `scripts/live_catalog_validation.py` passes against `http://api.dev.homelab.local`.
   - Validation report includes non-empty `/projects` and `/services`.
@@ -127,10 +127,22 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
   - Evidence is captured in a dated report artifact for dev.
 - **Risk:** Low
 
+### P1.4 Investigate healthy-but-empty Prometheus metrics coverage
+- **Status:** IN PROGRESS (2026-03-06)
+- **Problem:** Live metrics validation now succeeds with Prometheus healthy, but the summary response still reports no usable data for all metric fields.
+- **Evidence:** `scripts/live_catalog_validation.py` passed on 2026-03-06 with `metrics.provider = "prometheus"`, `metrics.status = "healthy"`, and `metrics.noDataFields = 4` for `serviceId = "homelab-api"`. After the service-registry metadata fix, live summary improved to `noDataFields = 3` with `restartCount` populated. A local follow-up now switches `uptimePct` to deployment-availability metrics and adds explicit UI/runbook messaging that request-level latency/error metrics remain unavailable without service HTTP instrumentation.
+- **Acceptance Criteria:**
+  - Metrics summary returns at least one populated field for a known live service in dev, or
+  - The no-data result is explained and documented as expected for the current metric set/workload instrumentation.
+  - Query templates and label selectors are validated against the actual Prometheus series emitted by `homelab-api` and `homelab-web`.
+  - Any expected no-data state is surfaced intentionally in runbooks or UI copy instead of being treated as an implicit success.
+- **Risk:** Low
+
 ### P2.1 Clean up stale manual or test-era registry rows
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-06)
 - **Problem:** Historical data includes manual/test artifacts (`Allowed`, `E2E Project`) and previous duplicate-key failures. These can confuse diagnostics during recovery.
 - **Evidence:** Postgres logs show duplicate key violations on `uq_service_registry_name_namespace_env` for manual/test rows on 2026-03-05.
+- **Progress:** Backend sync now prunes conflicting non-`cluster_services` rows before canonical upsert, and a new Alembic migration deletes existing non-canonical `service_registry` rows during rollout. Live cluster verification is still needed after the migration applies.
 - **Acceptance Criteria:**
   - Manual/test-only rows are removed or explicitly marked non-canonical.
   - Registry uniqueness guarantees hold under repeated sync runs.

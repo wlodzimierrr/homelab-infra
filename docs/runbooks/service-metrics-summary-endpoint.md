@@ -19,6 +19,12 @@ Compatibility alias also exists:
 
 - `GET /api/services/:serviceId/metrics-summary?range=...`
 
+Current default behavior:
+
+- `uptimePct` falls back to deployment availability over the selected window using kube-state-metrics.
+- `restartCount` uses container restart counters from Kubernetes metrics.
+- `p95LatencyMs` and `errorRatePct` require service-level HTTP instrumentation. If the app does not emit matching request metrics, these fields will remain `noData=true` even when Prometheus itself is healthy.
+
 ## 2. Validation steps
 
 1. Call endpoint with a valid bearer token and `range=24h`.

@@ -7,6 +7,7 @@ This runbook validates backend service-registry sync (`T4.6.2`).
 - Reads live Kubernetes Deployments from configured namespaces.
 - Optionally reads Argo CD Applications for `argoAppName` hints.
 - Upserts canonical rows into `service_registry` with idempotent conflict handling.
+- Prunes conflicting legacy non-canonical rows before canonical cluster upsert.
 
 ## Trigger Sync
 
@@ -55,6 +56,8 @@ Run sync twice and verify second run mostly reports updates/zero net inserts:
 curl -sS -X POST -H 'Authorization: Bearer dev-static-token' http://api.dev.homelab.local/service-registry/sync | jq
 curl -sS -X POST -H 'Authorization: Bearer dev-static-token' http://api.dev.homelab.local/service-registry/sync | jq
 ```
+
+If a historical manual or test row reuses the same `(service_name, namespace, env)` as a canonical cluster row, sync should prune the non-canonical row and still complete without `uq_service_registry_name_namespace_env` failures.
 
 ## Services API Validation
 
