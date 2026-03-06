@@ -130,23 +130,64 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 ### P1.4 Investigate healthy-but-empty Prometheus metrics coverage
 - **Status:** IN PROGRESS (2026-03-06)
 - **Problem:** Live metrics validation now succeeds with Prometheus healthy, but the summary response still reports no usable data for all metric fields.
-- **Evidence:** `scripts/live_catalog_validation.py` passed on 2026-03-06 with `metrics.provider = "prometheus"`, `metrics.status = "healthy"`, and `metrics.noDataFields = 4` for `serviceId = "homelab-api"`. After the service-registry metadata fix, live summary improved to `noDataFields = 3` with `restartCount` populated. A local follow-up now switches `uptimePct` to deployment-availability metrics and adds explicit UI/runbook messaging that request-level latency/error metrics remain unavailable without service HTTP instrumentation.
+- **Evidence:** `scripts/live_catalog_validation.py` passed on 2026-03-06 with `metrics.provider = "prometheus"`, `metrics.status = "healthy"`, and `metrics.noDataFields = 4` for `serviceId = "homelab-api"`. Live summary now populates `uptimePct` and `restartCount`, but `p95LatencyMs` and `errorRatePct` remain `null`; Prometheus series inspection showed infrastructure metrics in `homelab-api` but no matching `http_request_duration_seconds_bucket` / `http_requests_total` series for the current query templates.
+- **Progress:** Deployment-availability fallback now powers uptime and health timeline availability. Remaining work is to source request latency/error data from real emitted series, either by retargeting to existing ingress metrics or by adding app-level HTTP instrumentation and scrape configuration.
 - **Acceptance Criteria:**
-  - Metrics summary returns at least one populated field for a known live service in dev, or
-  - The no-data result is explained and documented as expected for the current metric set/workload instrumentation.
+  - Metrics summary returns populated `uptimePct`, `restartCount`, `p95LatencyMs`, and `errorRatePct` for a known live service in dev, or
+  - Any remaining no-data fields are explicitly documented as expected for the current metric set/workload instrumentation.
   - Query templates and label selectors are validated against the actual Prometheus series emitted by `homelab-api` and `homelab-web`.
   - Any expected no-data state is surfaced intentionally in runbooks or UI copy instead of being treated as an implicit success.
 - **Risk:** Low
 
 ### P2.1 Clean up stale manual or test-era registry rows
-- **Status:** IN PROGRESS (2026-03-06)
+- **Status:** DONE (2026-03-06)
 - **Problem:** Historical data includes manual/test artifacts (`Allowed`, `E2E Project`) and previous duplicate-key failures. These can confuse diagnostics during recovery.
 - **Evidence:** Postgres logs show duplicate key violations on `uq_service_registry_name_namespace_env` for manual/test rows on 2026-03-05.
-- **Progress:** Backend sync now prunes conflicting non-`cluster_services` rows before canonical upsert, and a new Alembic migration deletes existing non-canonical `service_registry` rows during rollout. Live cluster verification is still needed after the migration applies.
+- **Evidence (Live):** On 2026-03-06, live `service_registry` in dev contained only three canonical `cluster_services` rows (`homelab-api`, `homelab-web`, `oauth2-proxy`), a direct SQL check returned zero `Allowed` / `E2E Project` / non-`cluster_services` rows, and repeated `POST /service-registry/sync?source=cluster_services&env=dev` runs completed without uniqueness failures.
 - **Acceptance Criteria:**
   - Manual/test-only rows are removed or explicitly marked non-canonical.
   - Registry uniqueness guarantees hold under repeated sync runs.
   - Diagnostics reflect only canonical GitOps and cluster data.
+- **Risk:** Low
+
+### P1.5 Fix service health timeline window mismatch in the frontend
+- **Status:** TODO
+- **Problem:** The service details UI still offers a `6h` health timeline window, but the backend only accepts `24h` and `7d`.
+- **Evidence:** Switching the Service Health Timeline window to `6h` in dev triggers `GET /api/services/homelab-api/health/timeline?range=6h 422` in the browser console.
+- **Acceptance Criteria:**
+  - Frontend only offers timeline windows the backend accepts, or the backend is extended to support `6h`.
+  - Changing the timeline window does not trigger `422` in the browser console.
+  - Timeline errors remain visible to the user instead of silently degrading to an empty chart.
+- **Risk:** Low
+
+### P1.6 Restore service details deployment/status metadata from live sources
+- **Status:** TODO
+- **Problem:** Service details still show placeholder status/version states (`Health: unknown`, `Sync: unknown`, deployed version `N/A`) and deployment history can be empty or unavailable despite live catalogs being healthy.
+- **Evidence:** Dev service details for `homelab-api` still render `Deployed Version: N/A`, unknown status badges, and deployment-history empty/unavailable states while other live catalog data is present.
+- **Acceptance Criteria:**
+  - Service details status badges are backed by live release/Argo/service data.
+  - Deployed version resolves from live release/deployment metadata instead of placeholders.
+  - Recent deployment history loads consistently for live services.
+- **Risk:** Medium
+
+### P1.7 Restore live logs quickview behavior on service details
+- **Status:** TODO
+- **Problem:** Logs panels still degrade to “logs unavailable” or empty-state behavior even when Loki is healthy.
+- **Evidence:** The service details page still reports logs as unavailable in dev despite `GET /monitoring/providers/diagnostics` showing Loki healthy.
+- **Acceptance Criteria:**
+  - Service details logs quickview loads bounded lines for a known live service when Loki is healthy.
+  - User-visible errors distinguish `no matching log lines` from request/config/provider failures.
+  - Console/network errors for logs quickview are eliminated for healthy providers.
+- **Risk:** Medium
+
+### P1.8 Reconcile live service count and endpoint visibility in the portal
+- **Status:** TODO
+- **Problem:** Live cluster diagnostics report three services, but some portal surfaces still appear to show only two or provide `No public/internal endpoints available` for live services.
+- **Evidence:** `/services?env=dev` returns `homelab-api`, `homelab-web`, and `oauth2-proxy`, while the portal UI still appears to expose only two primary services and shows missing-endpoint states for some live details pages.
+- **Acceptance Criteria:**
+  - Portal list/detail views consistently reflect all live `/services` rows intended for operator visibility.
+  - Endpoint rendering distinguishes `no routed endpoint` from `metadata missing`.
+  - Any intentional filtering of service-only rows such as `oauth2-proxy` is documented in UI copy or runbooks.
 - **Risk:** Low
 
 ## Suggested execution order
@@ -157,4 +198,6 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 4. P1.1 CronJob green run verification
 5. P1.2 portal UI rebaseline
 6. P1.3 end-to-end validation rerun
-7. P2.1 data cleanup
+7. P1.4 metrics coverage
+8. P1.5 timeline window contract
+9. P1.6, P1.7, P1.8 service details live-data cleanup
