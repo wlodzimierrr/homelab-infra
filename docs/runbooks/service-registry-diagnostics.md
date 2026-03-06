@@ -12,10 +12,12 @@ GET /service-registry/diagnostics?env=dev
 
 - `freshness.rowCount`
 - `freshness.lastSyncedAt`
+- `freshness.warningAfterMinutes`
 - `freshness.staleAfterMinutes`
 - `freshness.isEmpty`
+- `freshness.isWarning`
 - `freshness.isStale`
-- `freshness.state` (`fresh` | `stale` | `empty`)
+- `freshness.state` (`fresh` | `warning` | `stale` | `empty`)
 - `joinMismatch.ciUnmatchedCount`
 - `joinMismatch.argoUnmatchedCount`
 - `joinMismatch.ciUnmatchedKeys` (`serviceId|serviceName|env`)
@@ -30,7 +32,7 @@ curl -sS -H 'Authorization: Bearer dev-static-token' \
 
 Alert conditions to watch:
 
+- `freshness.state == "warning"`: sync is aging and should refresh before crossing the stale SLO
 - `freshness.state == "stale"`: sync likely not running or blocked
 - `freshness.state == "empty"` with expected services: registry bootstrap/sync issue
 - `joinMismatch.*Count > 0`: upstream release metadata keys not aligning with registry projection
-

@@ -1990,7 +1990,7 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T4.7.7 Scheduled sync and freshness SLO for live catalogs
 - **Description:** Add scheduled sync orchestration and freshness thresholds so live catalogs stay current without manual intervention.
-- **Status:** TODO
+- **Status:** DONE (2026-03-06)
 - **Acceptance Criteria:**
   - Periodic sync job updates project/service registries on a defined interval.
   - Freshness thresholds produce warnings before data becomes operationally stale.
@@ -1998,10 +1998,33 @@ monitoring readiness so the dashboard reflects real operational state.
 - **Dependencies:** T4.7.2, T4.7.3, T4.6.7
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:**
+  - Added combined sync entrypoint for scheduled runs:
+    - `apps/portal/backend/scripts/sync_catalog_registries.py`
+    - emits JSON summary for both `gitops_apps` and `cluster_services`
+    - exits non-zero when either source reports failures
+  - Added in-cluster scheduled sync job:
+    - `workloads/apps/homelab-api/base/catalog-sync-cronjob.yaml`
+    - included in `workloads/apps/homelab-api/base/kustomization.yaml`
+    - runs every 10 minutes with backend service account and DB access
+  - Freshness diagnostics now support warning-before-stale semantics:
+    - `warningAfterMinutes`
+    - `isWarning`
+    - `state=warning`
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/backend/tests/test_api.py`
+  - Frontend readiness warnings now surface `warning` state ahead of `stale`:
+    - `apps/portal/frontend/src/pages/projects-page.tsx`
+    - `apps/portal/frontend/src/pages/services-page.tsx`
+  - Runbooks added/updated for scheduled sync and SLO troubleshooting:
+    - `docs/runbooks/catalog-sync-schedule.md`
+    - `docs/runbooks/project-registry-sync-pipeline.md`
+    - `docs/runbooks/service-registry-sync-pipeline.md`
+    - `docs/runbooks/service-registry-diagnostics.md`
 
 #### T4.7.8 End-to-end validation suite for live projects/services/monitoring
 - **Description:** Add smoke checks that verify full live flow: GitOps apps -> projects, cluster services -> services, monitoring endpoints -> dashboard data.
-- **Status:** TODO
+- **Status:** DONE (2026-03-06)
 - **Acceptance Criteria:**
   - Automated checks fail on legacy seeded project IDs and stale registry states.
   - Checks validate `/projects`, `/services`, `/releases`, metrics summary, and alerts feed.
@@ -2009,6 +2032,18 @@ monitoring readiness so the dashboard reflects real operational state.
 - **Dependencies:** T4.7.4, T4.7.5, T4.7.6
 - **Complexity:** M
 - **Risk:** Medium
+- **Evidence:**
+  - Added end-to-end validation script:
+    - `apps/portal/backend/scripts/live_catalog_validation.py`
+    - validates `/projects`, `/projects/diagnostics`, `/services`, `/service-registry/diagnostics`, `/releases`, `/services/:serviceId/metrics/summary`, and `/alerts/active`
+    - fails on legacy seeded project rows and stale/empty registry states
+    - emits JSON report suitable for before/after evidence capture
+  - Added unit tests for validation semantics:
+    - `apps/portal/backend/tests/test_live_catalog_validation.py`
+  - Backend README now documents the validation entrypoint:
+    - `apps/portal/backend/README.md`
+  - Runbook added for scripted validation and before/after reporting:
+    - `docs/runbooks/live-catalog-validation-suite.md`
 
 ---
 

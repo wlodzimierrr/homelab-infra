@@ -26,6 +26,14 @@ source .venv/bin/activate
 python scripts/sync_service_registry.py
 ```
 
+Combined catalog trigger:
+
+```bash
+cd apps/portal/backend
+source .venv/bin/activate
+python scripts/sync_catalog_registries.py
+```
+
 ## Expected Response Fields
 
 - `correlationId`
@@ -66,3 +74,18 @@ If Kubernetes/Argo source queries fail, the sync should still return a response 
 - populated `correlationId`
 - non-empty `sourceFailures`
 - backend logs containing `service_registry_sync_source_error`
+
+## Scheduled Sync
+
+In cluster, the backend CronJob runs every 10 minutes:
+
+- manifest: `workloads/apps/homelab-api/base/catalog-sync-cronjob.yaml`
+- command: `python scripts/sync_catalog_registries.py`
+
+Troubleshooting commands:
+
+```bash
+kubectl -n homelab-api get cronjob homelab-api-catalog-sync
+kubectl -n homelab-api get jobs --sort-by=.metadata.creationTimestamp | tail
+kubectl -n homelab-api logs job/<latest-catalog-sync-job>
+```
