@@ -702,8 +702,8 @@ Recommended immediate relabeling:
 - **Risk:** Medium
 - **Evidence:**
   - `workloads/audit/rbac-audit-2026-03-04.md` added as the committed RBAC audit report, with scope, commands, findings, and conclusion.
-  - Audit confirms app workload RBAC is namespace-scoped only (`Role` + `RoleBinding` in `homelab-api`) and includes no `ClusterRoleBinding` or `cluster-admin` references.
-  - `workloads/scripts/check-rbac-guardrails.sh` added to enforce guardrails against wildcard RBAC tokens and disallowed cluster-admin style bindings in `apps/**`.
+  - Audit confirms app workload RBAC avoids `cluster-admin`; namespace-scoped RBAC remains the default, with one reviewed read-only `ClusterRole` + `ClusterRoleBinding` exception for `homelab-api` cluster discovery.
+  - `workloads/scripts/check-rbac-guardrails.sh` enforces wildcard/token checks, blocks unexpected `ClusterRoleBinding`s, and ensures the approved cluster-wide binding stays read-only.
 
 ### E3.2 External auth integration
 
@@ -2050,35 +2050,106 @@ monitoring readiness so the dashboard reflects real operational state.
 ### E5.1 Multi-environment GitOps structure
 
 #### T5.1.1 Split environments with clear promotion contracts
-- **Description:** Implement dev/staging/prod overlays and promotion rules.
+- **Description:** Implement dev/prod overlays and promotion rules.
+- **Status:** DONE (2026-03-09)
 - **Acceptance Criteria:**
   - Environment differences are declarative and auditable.
   - Promotion between envs uses documented workflow only.
 - **Dependencies:** T2.2.2
 - **Complexity:** L
 - **Risk:** High
+- **Validation/Evidence Checklist:**
+  - `workloads/scripts/check-environment-contract.sh` passes against the current manifests.
+  - Dev and prod root apps still point to `workloads/environments/dev` and `workloads/environments/prod` only.
+  - A normal prod promotion PR changes only the documented prod image patch files.
+  - The operator runbook for promotion and rollback is documented and usable without ad-hoc `kubectl` edits.
+- **Evidence:**
+  - Dev/prod GitOps entrypoints are explicit:
+    - `workloads/bootstrap/root-app-dev.yaml`
+    - `workloads/bootstrap/root-app-prod.yaml`
+    - `workloads/environments/dev/kustomization.yaml`
+    - `workloads/environments/prod/kustomization.yaml`
+  - Workload overlays are split per environment and stay declarative:
+    - `workloads/apps/homelab-api/envs/dev`
+    - `workloads/apps/homelab-api/envs/prod`
+    - `workloads/apps/homelab-web/envs/dev`
+    - `workloads/apps/homelab-web/envs/prod`
+  - Repo-side validation now enforces the environment contract:
+    - `workloads/scripts/check-environment-contract.sh`
+    - `workloads/.github/workflows/validate-gitops-environment-contract.yml`
+  - Promotion and rollback flow are documented as `dev -> prod` only:
+    - `docs/runbooks/gitops-dev-prod-promotion.md`
+    - `workloads/README.md`
+    - `apps/portal/.github/workflows/gated-promotion.yml`
 
 ### E5.2 Self-service project bootstrap
 
 #### T5.2.1 Create project template generator (repo + manifests + CI seed)
 - **Description:** Script/template that scaffolds a new service in <30 minutes.
+- **Status:** DONE (2026-03-09)
 - **Acceptance Criteria:**
   - New project includes CI, deployment manifests, and baseline policies.
   - At least one generated project deployed successfully.
 - **Dependencies:** T5.1.1
 - **Complexity:** XL
 - **Risk:** High
+- **Validation/Evidence Checklist:**
+  - `workloads/scripts/scaffold-service.sh` generates both a service repo skeleton and GitOps manifests for a new service name.
+  - Generated `dev` and `prod` overlays render successfully with `kustomize build`.
+  - Generator smoke test passes without mutating the checked-in workloads tree.
+  - A generated service rolls out successfully in a throwaway namespace and can be cleaned up cleanly.
+  - Operator docs explain the current single-cluster behavior for prod app manifests.
+- **Evidence:**
+  - Scaffold generator and wrapper added:
+    - `workloads/scripts/scaffold-service.py`
+    - `workloads/scripts/scaffold-service.sh`
+  - Generator smoke test added and wired into GitOps validation:
+    - `workloads/scripts/smoke-test-scaffold-generator.sh`
+    - `workloads/.github/workflows/validate-gitops-environment-contract.yml`
+  - Usage documented in:
+    - `workloads/README.md`
+  - Throwaway rollout validation completed on 2026-03-09:
+    - generated `scaffold-live-check2` via `workloads/scripts/scaffold-service.py`
+    - applied `apps/scaffold-live-check2/envs/dev` to the cluster with a public `nginx:1.27-alpine` image plus `/` probe overrides
+    - `kubectl -n scaffold-live-check2 rollout status deployment/scaffold-live-check2` succeeded
+    - cleanup verified with `kubectl get ns scaffold-live-check2 -o name` returning `NotFound`
+- **Notes:**
+  - The generator creates prod overlays and a prod `Application` manifest file, but does not auto-enable `environments/prod/workloads/kustomization.yaml` while single-cluster safety mode remains active.
 
 ### E5.3 Internal developer portal seed
 
 #### T5.3.1 Publish a lightweight service catalog page
 - **Description:** Start with static/service metadata view before full portal platform.
+- **Status:** DONE (2026-03-09)
 - **Acceptance Criteria:**
   - Catalog includes owner, repo, runbook, env status links.
   - Data source is Git (not manual spreadsheet).
 - **Dependencies:** T5.2.1
 - **Complexity:** M
 - **Risk:** Medium
+- **Validation/Evidence Checklist:**
+  - Portal catalog data includes Git-backed owner, repository, and runbook metadata for registered services.
+  - The Services page shows environment status links for GitOps environments, including Git-only prod intent in the current single-cluster mode.
+  - New scaffolded services register catalog metadata in Git as part of generation.
+  - No spreadsheet or manual out-of-band catalog source is required.
+- **Evidence:**
+  - Git-backed service metadata source added:
+    - `workloads/services.yaml`
+  - Portal backend persists metadata with the GitOps project registry and exposes it through `/projects`:
+    - `apps/portal/backend/app/gitops_project_sync.py`
+    - `apps/portal/backend/app/main.py`
+    - `apps/portal/backend/alembic/versions/20260309_0005_add_project_registry_metadata_columns.py`
+  - Portal frontend catalog now renders owner, repo, runbook, and environment status links:
+    - `apps/portal/frontend/src/lib/adapters/services.ts`
+    - `apps/portal/frontend/src/pages/services-page.tsx`
+    - `apps/portal/frontend/src/pages/projects-page.tsx`
+  - Service-specific runbooks linked from the catalog:
+    - `docs/runbooks/homelab-api-service-operations.md`
+    - `docs/runbooks/homelab-web-service-operations.md`
+  - Scaffold generator now appends service catalog metadata for new services:
+    - `workloads/scripts/scaffold-service.py`
+    - `workloads/scripts/smoke-test-scaffold-generator.sh`
+    - `workloads/README.md`
 
 ---
 
