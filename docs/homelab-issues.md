@@ -1,6 +1,6 @@
 # Homelab Portal Issues
 
-Last updated: 2026-03-06
+Last updated: 2026-03-09
 
 ## Current dev state
 
@@ -149,6 +149,22 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
   - Diagnostics reflect only canonical GitOps and cluster data.
 - **Risk:** Low
 
+### P2.2 Investigate intermittent Postgres reachability during scheduled catalog syncs
+- **Status:** TODO
+- **Problem:** Scheduled `homelab-api-catalog-sync` jobs intermittently fail before source sync starts because the initial Postgres connection to `homelab-api-postgres:5432` is refused.
+- **Evidence:** On 2026-03-09 at `08:30`, `08:40`, `08:50`, and `09:20` UTC, `catalog_sync_run_error` logged `psycopg.OperationalError: connection failed: connection to server at "10.43.180.172", port 5432 failed: Connection refused`. The failed Job `homelab-api-catalog-sync-29550800` on `node-3` retried twice and both pods exited within 1 second before any source sync began (`"sources": {}`), while later jobs such as `29550820` completed successfully and diagnostics returned to `fresh`.
+- **Acceptance Criteria:**
+  - Scheduled catalog-sync jobs stop failing with initial `psycopg.connect(...)` connection refusals.
+  - A rolling window of recent CronJob runs completes successfully without transient Postgres reachability failures.
+  - If the underlying cause is operational rather than app-level, the runbook or tracker records the node/network/service condition and the chosen mitigation.
+  - Project and service catalog diagnostics remain `fresh` across repeated scheduled sync intervals.
+- **Likely Work Areas:**
+  - Transient service/endpoints availability for `homelab-api-postgres`.
+  - Node-local networking or kube-proxy behavior on `node-3`.
+  - Resource pressure or short-lived readiness/listener gaps on the Postgres pod.
+  - CronJob retry timing vs. brief backend unavailability windows.
+- **Risk:** Medium
+
 ### P1.5 Fix service health timeline window mismatch in the frontend
 - **Status:** DONE (2026-03-06)
 - **Problem:** The service details UI still offers a `6h` health timeline window, but the backend only accepts `24h` and `7d`.
@@ -192,6 +208,60 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
   - Any intentional filtering of service-only rows such as `oauth2-proxy` is documented in UI copy or runbooks.
 - **Risk:** Low
 
+### P1.9 Restore live commit, image, Argo sync, and deployed metadata on the release dashboard tab
+- **Status:** DONE (2026-03-09)
+- **Problem:** The release dashboard still shows placeholder values such as `Upstream unknown` or `Unknown` for commit, image, Argo sync, and deployed state even though live release and Argo metadata exist for `homelab-api` and `homelab-web`.
+- **Evidence:** On 2026-03-09 the release dashboard tab still showed `Commit = Upstream unknown`, `Image = Upstream unknown`, `Argo Sync = Unknown`, and `Deployed = Upstream unknown` for both `homelab-api` and `homelab-web`, while live `/services/{serviceId}` data already resolved real `version`, `health`, and `sync` values for `homelab-api`. This was fixed by enriching `/releases` with live Deployment/Argo fallback metadata and by letting the dashboard adapter fall back to `argo.revision` for commit display. Live `GET /releases?env=dev&limit=50` now returns real `commitSha`, `imageRef`, `argo.appName`, `argo.syncStatus`, `argo.healthStatus`, and `deployedAt` values for both `homelab-api` and `homelab-web`.
+- **Acceptance Criteria:**
+  - Release dashboard rows show commit SHA, image reference, Argo sync state, and deployed timestamp/status when live metadata exists.
+  - Placeholder copy is only shown when upstream data is genuinely missing, not when adapters fail to map available fields.
+  - Dashboard drift and sync indicators stay consistent with the underlying release traceability API.
+- **Risk:** Medium
+
+### P1.10 Restore live status and last-deploy fields on the services list
+- **Status:** IN PROGRESS (2026-03-09)
+- **Problem:** The services list still renders `Health: unknown`, `Sync: unknown`, and `Last Deploy: N/A` for live services even though cluster sync and service details now resolve real metadata.
+- **Evidence:** On 2026-03-09 the Services page still showed `Health: unknown`, `Sync: unknown`, and `Last Deploy: N/A` for `homelab-api` and `homelab-web`, while `GET /services/homelab-api?env=dev` returned `health = "healthy"`, `sync = "synced"`, and `version = "sha-d642ac..."`.
+- **Progress:** The frontend services adapter now enriches registry rows with live `GET /releases?limit=...` traceability data plus `GET /services/{serviceId}/metrics/summary`, so list rows can pick up real health/sync, last deploy, and uptime values instead of staying at registry defaults or depending on partially populated service-detail responses. Live browser verification after rollout is still needed.
+- **Acceptance Criteria:**
+  - Services list rows reflect live health/sync metadata instead of default unknown badges when the service detail endpoint has real values.
+  - Last deploy is populated from live deployment/release metadata where available.
+  - Services list cards no longer show false `No Data` uptime states when live metrics exist for the service.
+- **Risk:** Medium
+
+### P1.11 Restore service details overview cards from live metadata
+- **Status:** IN PROGRESS (2026-03-09)
+- **Problem:** The Service Overview tab still shows `Deployed Version: N/A` and `Service Status: unknown` for some live services even after backend metadata restoration.
+- **Evidence:** On 2026-03-09 the `homelab-web` service page still rendered `Deployed Version: N/A` and `Health: unknown / Sync: unknown` in the overview cards, despite the service-details backend work and live service metadata improvements already shipping for `homelab-api`.
+- **Progress:** The service-details frontend now uses live `/releases?serviceId=...` traceability rows as a fallback source for version, health/sync, and deployment cards when the direct service-detail payload remains unresolved or deployment history is empty. Live browser verification after rollout is still needed.
+- **Acceptance Criteria:**
+  - Overview cards on the Service page render live deployed version, health, and sync values for both `homelab-api` and `homelab-web`.
+  - Placeholder copy is replaced by accurate live-state messaging or a precise missing-data reason.
+  - Frontend identity/adapters use the resolved service detail payload instead of stale fallback values.
+- **Risk:** Medium
+
+### P1.12 Restore service-details observability embeds and quick links
+- **Status:** IN PROGRESS (2026-03-09)
+- **Problem:** The Service page still shows `Grafana unavailable` and unavailable Argo/Grafana quick links, leaving latency/error panels and external navigation degraded even when backend observability data is available.
+- **Evidence:** On 2026-03-09 the service page still rendered `Grafana embed URL is not configured`, `Argo CD Application unavailable due to missing monitoring URL configuration`, and `Grafana Dashboard unavailable due to missing monitoring URL configuration`.
+- **Progress:** The frontend now derives Argo links from the resolved `argoAppName` instead of the raw service id, and the homelab frontend config now infers the repo's real Argo/Grafana base URLs on homelab hosts so service-details embeds and quick links are not permanently disabled by empty defaults. Live browser verification after rollout is still needed.
+- **Acceptance Criteria:**
+  - Latency & Error Trends panels render usable embeds or a precise intentional disabled-state tied to missing config.
+  - Quick links for Argo CD, Grafana dashboard, and logs resolve correctly when URLs are configured.
+  - UI copy distinguishes missing operator configuration from provider/data failures.
+- **Risk:** Low
+
+### P1.13 Restore recent deployments panel and deployment history on service details
+- **Status:** IN PROGRESS (2026-03-09)
+- **Problem:** The Service page still reports `Deployment history unavailable` or empty recent deployments even when live `/services/{serviceId}/deployments` data exists.
+- **Evidence:** On 2026-03-09 the Service page still showed `Deployment history unavailable` / `Service endpoint is not available in this backend` for Recent Deployments, despite `GET /services/homelab-api/deployments?env=dev` returning a live deployment row with version and deployed timestamp.
+- **Progress:** The frontend deployment-history adapter now falls back to `/releases?serviceId=...` traceability rows when the direct deployments endpoint is unavailable or empty, so both the Recent Deployments panel and the full deployment-history page can still render live version/status/deployed timestamps. Live browser verification after rollout is still needed.
+- **Acceptance Criteria:**
+  - Recent Deployments on the Service page renders live deployment rows when `/services/{serviceId}/deployments` returns data.
+  - “Open full history” routes to a working deployment history experience for the service.
+  - Error states distinguish missing backend support from transient request failures.
+- **Risk:** Medium
+
 ## Suggested execution order
 
 1. P0.1 GitOps repo access
@@ -203,3 +273,7 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 7. P1.4 metrics coverage
 8. P1.5 timeline window contract
 9. P1.6, P1.7, P1.8 service details live-data cleanup
+10. P1.9 release dashboard traceability cleanup
+11. P1.10 services list status/last deploy cleanup
+12. P1.11, P1.12, P1.13 service details UI cleanup
+13. P2.2 intermittent Postgres reachability during scheduled syncs
