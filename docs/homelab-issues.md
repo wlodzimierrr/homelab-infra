@@ -1,6 +1,6 @@
 # Homelab Portal Issues
 
-Last updated: 2026-03-09
+Last updated: 2026-03-10
 
 ## Current dev state
 
@@ -15,7 +15,7 @@ Observed against `http://api.dev.homelab.local` on 2026-03-06:
 - `GET /alerts/active` and `GET /monitoring/incidents` return healthy `providerStatus`.
 - Latest scheduled `homelab-api-catalog-sync` Job completed successfully on 2026-03-06 and emitted `catalog_sync_source_result` / `catalog_sync_run_result` log lines for both `gitops_apps` and `cluster_services`.
 
-The portal UI is now backed by live project, service, and monitoring sources. Remaining work is verification, UI rebaseline, and cleanup.
+The portal UI is now backed by live project, service, and monitoring sources. The remaining open work is limited to Grafana deep-link polish and an intermittent Postgres connectivity issue on scheduled catalog syncs.
 
 ## Priority
 
@@ -23,6 +23,308 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 2. Re-run end-to-end validation and capture fresh dev evidence.
 3. Rebaseline UI state against live data.
 4. Remove stale/manual registry artifacts.
+
+## Readiness evidence
+
+### 2026-03-09 Immutable CI artifact verification
+
+Captured against `wlodzimierrr/homelab-portal` and `wlodzimierrr/homelab-workloads` on 2026-03-09:
+
+| Date | Commit SHA | Workflow run | GitOps PR | GHCR tags | Retained evidence |
+| --- | --- | --- | --- | --- | --- |
+| 2026-03-09T13:42:56Z | `cd76e5907910d89a50a9ad93a635b726007fde5e` | `#22856331866` | `#35` | `homelab-api:sha-cd76e5907910d89a50a9ad93a635b726007fde5e` = `ok`; `homelab-web:sha-cd76e5907910d89a50a9ad93a635b726007fde5e` = `ok` | Workflow artifacts included `sbom-backend-cd76e5907910d89a50a9ad93a635b726007fde5e` and `sbom-frontend-cd76e5907910d89a50a9ad93a635b726007fde5e`; backend SBOM download was manually verified. |
+| 2026-03-09T12:19:59Z | `f3e0f15f5678d47f9efe0caf9ab8e2c2eaf67d2d` | `#22853134726` | `#34` | `homelab-api:sha-f3e0f15f5678d47f9efe0caf9ab8e2c2eaf67d2d` = `ok`; `homelab-web:sha-f3e0f15f5678d47f9efe0caf9ab8e2c2eaf67d2d` = `ok` | Workflow artifacts included `sbom-backend-f3e0f15f5678d47f9efe0caf9ab8e2c2eaf67d2d` and `sbom-frontend-f3e0f15f5678d47f9efe0caf9ab8e2c2eaf67d2d`. |
+| 2026-03-09T12:04:47Z | `6beb5ac154c3e0df2009eefd904b6f9c33318412` | `#22852594704` | `#33` | `homelab-api:sha-6beb5ac154c3e0df2009eefd904b6f9c33318412` = `ok`; `homelab-web:sha-6beb5ac154c3e0df2009eefd904b6f9c33318412` = `ok` | Workflow artifacts included `sbom-backend-6beb5ac154c3e0df2009eefd904b6f9c33318412` and `sbom-frontend-6beb5ac154c3e0df2009eefd904b6f9c33318412`. |
+
+Result: the immutable-artifact readiness gate is satisfied for the current audit because recent merged commits can be traced from source commit -> successful image workflow run -> immutable `sha-<commit>` GHCR tags -> GitOps PR, with retained SBOM artifacts.
+
+### 2026-03-09 Dev auto-promotion verification
+
+Captured against `wlodzimierrr/homelab-portal`, `wlodzimierrr/homelab-workloads`, and Argo CD on 2026-03-09:
+
+- Recent `portal-images.yml` runs were correlated with matching `homelab-workloads` PRs and Argo deployment history for both `homelab-api-dev` and `homelab-web-dev`.
+- Nine recent merged auto-bump PRs were confirmed end-to-end with retained Argo deployment timestamps on both dev apps:
+  - `#35`, `#33`, `#32`, `#31`, `#30`, `#29`, `#28`, `#27`, `#26`
+- PR `#34` (`automation/dev-image-bump-f3e0f15f5678d47f9efe0caf9ab8e2c2eaf67d2d`) was closed without merge because the operator forgot to merge it before pushing again. This was reviewed and accepted as a skipped/superseded manual action, not as a GitOps/Argo sync failure.
+- Older merged PRs exist as additional evidence, but some detailed per-app Argo history entries are no longer retained for those revisions.
+
+Result: the promotion-readiness gate is accepted for the current audit based on repeated successful dev auto-bumps, live Argo evidence for recent merged runs, and explicit operator confirmation that the only recent interruption was a manual superseded PR rather than a platform fault.
+
+### 2026-03-09 SOPS/KSOPS GitOps integration
+
+Captured against this repo and the live cluster on 2026-03-09:
+
+- `ansible/roles/argocd/tasks/main.yml` now patches `argocd-repo-server` to mount `ksops`, consume the `argocd-sops-age` Secret, and enable plugin-aware Kustomize builds.
+- `workloads/apps/homelab-api/envs/dev` and `workloads/apps/homelab-api/envs/prod` now use `postgres-secret-generator.yaml`.
+- `workloads/apps/homelab-web/envs/dev` now uses `oauth2-proxy-secret-generator.yaml`.
+- The live `oauth2-proxy-secret` was exported from the cluster, stripped to stable fields, and re-encrypted into `workloads/apps/homelab-web/envs/dev/oauth2-proxy-secret.enc.yaml`.
+- Local validation passed with a temporary `ksops` binary: `check-secrets-guardrails.sh`, `check-environment-contract.sh`, `validate-sso-integration.sh`, and `smoke-test-scaffold-generator.sh` all succeeded.
+- Live Argo repo-server validation passed:
+  - `argocd-sops-age` Secret created in namespace `argocd`
+  - `argocd-cm.data["kustomize.buildOptions"] = "--enable-alpha-plugins --enable-exec"`
+  - `argocd-repo-server` rolled out successfully with `busybox:1.36.1` init container, mounted `/usr/local/bin/ksops`, and mounted `/home/argocd/.config/sops/age/keys.txt`
+
+Post-push validation captured on 2026-03-09:
+
+- `homelab-workloads` advanced to revision `5d3095f` in both `homelab-api-dev` and `homelab-web-dev`.
+- `argocd app manifests homelab-api-dev --grpc-web` rendered a real `kind: Secret` object named `homelab-api-postgres`.
+- `argocd app manifests homelab-web-dev --grpc-web` rendered a real `kind: Secret` object named `oauth2-proxy-secret`.
+- Both Applications remained `Synced` and `Healthy`.
+- `kubectl -n homelab-api rollout status deploy/homelab-api --timeout=300s` succeeded.
+- `kubectl -n homelab-web rollout status deploy/oauth2-proxy --timeout=300s` succeeded.
+
+Result: the secrets-readiness gate is satisfied. Git-managed encrypted secrets are now decrypted and applied through the live Argo CD delivery path for at least two services with no runtime issues.
+
+### 2026-03-09 Observability alert drill
+
+Captured against the live monitoring stack, the portal API, and the cluster on 2026-03-09:
+
+- A temporary `PrometheusRule` named `homelab-observability-drill` was applied in namespace `monitoring` with:
+  - `alert: HomelabObservabilityDrill`
+  - `expr: vector(1)`
+  - `for: 1m`
+  - labels `service=homelab-api`, `env=dev`, `severity=warning`, `drill=readiness`
+- The rule was created at `2026-03-09T18:00:36Z`.
+- Prometheus confirmed the alert as `firing` at `2026-03-09T18:03:27Z` via:
+  - `ALERTS{alertname="HomelabObservabilityDrill",alertstate="firing"}`
+- Alertmanager returned the active alert with:
+  - `startsAt = 2026-03-09T18:02:31.101Z`
+  - `status.state = "active"`
+  - labels including `service = "homelab-api"` and `env = "dev"`
+- The portal alert surface returned the same active alert at `2026-03-09T18:04:38Z` through:
+  - `GET /alerts/active?env=dev&serviceId=homelab-api&limit=50`
+  - healthy `providerStatus.provider = "alertmanager"`
+- The portal metrics surface returned healthy Prometheus-backed service metrics in the same drill window at `2026-03-09T18:04:38Z` through:
+  - `GET /services/homelab-api/metrics/summary?range=1h`
+  - `uptimePct = 100`
+  - `p95LatencyMs = 24.181818181818183`
+  - `errorRatePct = 0`
+  - `restartCount = 0`
+- Related logs for the same event window were captured directly from the Prometheus pod:
+  - `2026-03-09T18:01:16.809Z Loading configuration file`
+  - `2026-03-09T18:01:16.850Z Completed loading of configuration file`
+  These log lines bracket the rule landing and reload before the alert entered `firing`.
+- Cleanup was confirmed:
+  - the temporary `PrometheusRule` was deleted
+  - by `2026-03-09T18:10:31Z`, Prometheus returned no matching `ALERTS`, Alertmanager returned `[]`, and `GET /alerts/active?env=dev&serviceId=homelab-api&limit=50` returned `total = 0`
+
+Result: the observability-readiness gate is satisfied. A real alert was intentionally triggered, observed through Prometheus, Alertmanager, and the portal alert surface, correlated with live metrics and logs for the same service/window, and then cleared cleanly.
+
+### 2026-03-09 Git-backed rollback drill
+
+Captured against `homelab-workloads`, Argo CD, and the live cluster on 2026-03-09:
+
+- Before rollback at `2026-03-09T18:21:39Z`:
+  - `homelab-workloads/main` was at revision `d83af799f4d6f7ed9f9bede5d44193a4cf6584d9`
+  - `homelab-api-dev` and `homelab-web-dev` were both `Synced` and `Healthy`
+  - both live deployments were on image tag `sha-cd76e5907910d89a50a9ad93a635b726007fde5e`
+- A real Git-backed rollback was executed at `2026-03-09T18:22:38Z` by reverting merge commit `8e08f8121fbcc68434fb9404f03a03660e434e7f` in `homelab-workloads`.
+- The rollback commit was:
+  - `b11ba312617de122359916a13a16fde3a3dbee86`
+  - message: `Revert "Merge pull request #35 from wlodzimierrr/automation/dev-image-bump-cd76e5907910d89a50a9ad93a635b726007fde5e"`
+- The revert changed only the four expected dev image patch files:
+  - `apps/homelab-api/envs/dev/patch-deployment.yaml`
+  - `apps/homelab-api/envs/dev/patch-migration-job.yaml`
+  - `apps/homelab-api/envs/dev/patch-catalog-sync-cronjob.yaml`
+  - `apps/homelab-web/envs/dev/patch-deployment.yaml`
+- Those changes restored both apps from `sha-cd76e5907910d89a50a9ad93a635b726007fde5e` back to the previous known-good `sha-6beb5ac154c3e0df2009eefd904b6f9c33318412`.
+- The revert was pushed to `homelab-workloads/main` at `2026-03-09T18:22:38Z`.
+- Argo reconciliation evidence:
+  - both apps remained at old revision `d83af79...` through `18:24:40Z`
+  - at `2026-03-09T18:24:54Z`, both `homelab-api-dev` and `homelab-web-dev` reported revision `b11ba312617de122359916a13a16fde3a3dbee86`
+  - at that same timestamp, both apps were `Synced` and `Healthy`
+  - at that same timestamp, both live deployment images had changed to `sha-6beb5ac154c3e0df2009eefd904b6f9c33318412`
+- Measured rollback recovery time:
+  - push time: `2026-03-09T18:22:38Z`
+  - Argo/livedeploy reconcile confirmation: `2026-03-09T18:24:54Z`
+  - total: `2m16s`
+- Post-rollback verification succeeded:
+  - `kubectl -n homelab-api rollout status deploy/homelab-api --timeout=300s`
+  - `kubectl -n homelab-web rollout status deploy/homelab-web --timeout=300s`
+
+Result: the rollback-readiness gate is satisfied. A real Git-backed rollback was executed, Argo applied it in under 5 minutes, and both dev services were verified on the known-good version after reconcile.
+
+### 2026-03-10 Deployment-record and rollout-verification evidence
+
+Captured against `http://api.dev.homelab.local`, `wlodzimierrr/homelab-portal`, and `wlodzimierrr/homelab-workloads` on 2026-03-10:
+
+- The deployment-record API and live reconciler were exercised through real GitOps mutations after the deployment-record backend and reconciler fixes were deployed.
+- Fresh canonical evidence set:
+  - Deploy `#46` (`automation/dev-image-bump-04aea0869d105ee2332bf7e2ceb668ac4251c675`) reached `live` for both `homelab-api` and `homelab-web`.
+    - `requestedAt = 2026-03-10T17:10:11+00:00`
+    - `startedAt = 2026-03-10T17:12:55+00:00`
+    - `finishedAt = 2026-03-10T17:14:31.375670+00:00`
+  - Config-change `#45` (`automation/dev-config-change-homelab-web-replicas-1-22914424849`) reached `live` for `homelab-web`.
+    - `requestedAt = 2026-03-10T17:01:47+00:00`
+    - `startedAt = 2026-03-10T17:03:28+00:00`
+    - `finishedAt = 2026-03-10T17:13:00.758174+00:00`
+  - Rollback `#42` (`automation/prod-rollback-image-update-22912496498`) created real prod deployment rows for both `homelab-api` and `homelab-web`, was observed as `pending`, and then was automatically marked `failed` after the PR was intentionally closed without merge.
+    - `requestedAt = 2026-03-10T16:22:12+00:00`
+    - `finishedAt = 2026-03-10T16:37:20.793463+00:00`
+    - `failureReason = "GitOps pull request was closed without merge."`
+- Lifecycle proof captured on 2026-03-10:
+  - `pending`: rollback `#42` before PR close
+  - `deploying`: deploy `#46` after merge and before rollout completion
+  - `live`: deploy `#46` and config-change `#45`
+  - `failed`: rollback `#42`, plus earlier failed deploy rows with operator-visible reason text
+- Reconciler verification was confirmed through the live deployment-record API and `/deployments/reconcile` once the route-order, terminal-state, timestamp, and cache-invalidation fixes were deployed.
+- Earlier rows created during reconciler-fix iterations (`#39`, `#41`, `#44`) should not be treated as the canonical proof set for Level 3 readiness because they were captured while verification and cache logic were still being corrected.
+- Promote evidence captured on 2026-03-10:
+  - `Gated GitOps Promotion` workflow run `#22915432416` succeeded.
+  - `homelab-workloads` PR `#47` (`automation/prod-promote-image-update-22915432416`) merged at `2026-03-10T17:27:22Z`.
+  - The deployment-record API returned real `action = "promote"` rows for both `homelab-api` and `homelab-web` in `prod`, with `gitPrNumber = 47`, `gitRef = "automation/prod-promote-image-update-22915432416"`, `deployReason = "GitOps promote via PR #47"`, and version `sha-04aea0869d105ee2332bf7e2ceb668ac4251c675`.
+  - In the current single-cluster safety mode, `workloads/environments/prod/workloads/kustomization.yaml` is intentionally empty and `workloads/environments/prod/workloads-app.yaml` keeps `allowEmpty: true`, so those prod promote rows are not expected to reach `live` in this cluster.
+  - Operator confirmation on 2026-03-10 states the promote path had already been exercised successfully before prod workloads were intentionally disabled, primarily because separate live prod workloads are not currently needed in this solo setup and the extra environment complicated observability.
+
+Result: `L3.1`, `L3.2`, and `L3.3` are accepted as satisfied for the current single-cluster topology. The canonical 2026-03-10 evidence set now includes real `deploy` (`#46`), `promote` (`#47`), `config-change` (`#45`), and `rollback` (`#42`) rows, with an explicit operator-reviewed exception that current prod promote rows are traceability proof rather than live workload proof because prod workloads are intentionally disabled in single-cluster safety mode.
+
+### 2026-03-11 Deploy-lock drill
+
+Captured against `http://api.dev.homelab.local` on 2026-03-11:
+
+- The portal backend was running the deployment-lock implementation backed by:
+  - `apps/portal/backend/alembic/versions/20260310_0007_create_deployment_locks_table.py`
+  - `apps/portal/backend/app/deployment_locks.py`
+  - `apps/portal/backend/app/main.py`
+  - `apps/portal/backend/app/deployment_reconciler.py`
+- A manual `pending` deployment write for `homelab-api/dev` succeeded with:
+  - `requestKey = "manual-lock-test-1"`
+  - `action = "deploy"`
+  - `status = "pending"`
+- `GET /services/homelab-api?env=dev` returned a non-null `deploymentLock` for that in-flight mutation, including:
+  - `serviceId = "homelab-api"`
+  - `env = "dev"`
+  - `requestKey = "manual-lock-test-1"`
+  - `action = "deploy"`
+  - `status = "pending"`
+  - `lockedAt = "2026-03-11T11:29:40.121152+00:00"`
+  - `expiresAt = "2026-03-11T11:59:40.121152+00:00"`
+- While that lock was active, a second overlapping `pending` write for `homelab-api/dev` returned `HTTP 409 Conflict` with:
+  - message: `Active deployment lock already exists for homelab-api/dev. Wait for the in-flight mutation to finish or clear its stale lock.`
+  - the active lock payload embedded in the response body for operator diagnostics
+- A terminal cleanup write for the same `requestKey` changed the first row to `status = "failed"` with `failureReason = "Intentional cleanup."`
+- After that terminal write, `GET /services/homelab-api?env=dev` returned `deploymentLock = null`
+
+Result: `L3.4` is satisfied. Deploy locks now exist per `serviceId + env`, overlapping writes are rejected with an operator-visible `409` payload, and locks release on terminal deployment state.
+
+### 2026-03-11 Portal rollback workflow live evidence
+
+Implementation landed in the portal codebase on 2026-03-11:
+
+- `apps/portal/backend/app/github_workflows.py` dispatches the existing `gated-promotion.yml` workflow in `rollback` mode using GitHub `workflow_dispatch`.
+- `apps/portal/backend/app/main.py` exposes `POST /rollbacks` for portal-initiated rollback requests.
+- `apps/portal/.github/workflows/gated-promotion.yml` now accepts `operator_reason` and records it in rollback PR bodies plus workflow-written deployment records.
+- `apps/portal/backend/app/deployment_reconciler.py` parses `- Reason:` lines from rollback PR bodies so operator-provided reason text survives reconcile/backfill.
+- `apps/portal/frontend/src/pages/service-details-page.tsx` now exposes a rollback request panel for `homelab-api` and `homelab-web`.
+
+Live drill captured on 2026-03-11:
+
+- The first live `POST /rollbacks` request failed with `HTTP 503` because the running `homelab-api` Deployment did not yet have a GitHub Actions dispatch token.
+- A temporary cluster-only secret, `homelab-api-github-actions`, was created in namespace `homelab-api`, and the live `homelab-api` Deployment was patched to consume `PORTAL_GITHUB_ACTIONS_TOKEN` from that secret so the portal rollback path could be exercised immediately.
+- After that hotfix, a real portal rollback request for previous known-good tags (`sha-6beb5ac...`) returned `202 Accepted` and triggered GitHub Actions run `#22953368415` in `wlodzimierrr/homelab-portal`.
+- Once the manual approval gate was approved, the workflow created `wlodzimierrr/homelab-workloads` PR `#53` (`automation/prod-rollback-image-update-22953368415`).
+- Before closing the PR, the deployment-record API returned fresh `action = rollback` rows for both `homelab-api` and `homelab-web` in `prod` with:
+  - `gitPrNumber = 53`
+  - `gitRef = "automation/prod-rollback-image-update-22953368415"`
+  - `deployReason = "Portal rollback fire drill for L3.6 traceability verification to previous known-good tags."`
+  - a real `compareUrl`
+- PR `#53` was then intentionally closed without merge as a safe fire drill. After `POST /deployments/reconcile?env=prod`, both rollback rows ended in:
+  - `status = "failed"`
+  - `failureReason = "GitOps pull request was closed without merge."`
+
+Durability follow-up captured the same day:
+
+- The temporary token wiring was moved into GitOps by adding a SOPS-managed dev secret, `homelab-api-github-actions`, to `workloads/apps/homelab-api/envs/dev`.
+- Argo reconciled `homelab-api-dev` to workloads revision `9852145db62acd7c8c298612888441fbf2d30990`.
+- `kubectl -n argocd get application homelab-api-dev -o json` then showed `Secret/homelab-api-github-actions` in the managed resource list with `status = "Synced"`.
+- `kubectl -n homelab-api get deploy homelab-api -o jsonpath=...` confirmed the live API Deployment still reads `PORTAL_GITHUB_ACTIONS_TOKEN` from `homelab-api-github-actions` after the GitOps sync.
+- A final no-op portal rollback request using the current prod tags returned `202 Accepted` at `2026-03-11T13:30:39.239012+00:00`, confirming that the durable GitOps-managed token path can still dispatch the rollback workflow after Argo adoption.
+
+Result: `L3.6` is satisfied. Portal rollback is now first-class, traceable through deployment records and Git linkage, and backed by a GitOps-managed credential path rather than a cluster-only hotfix.
+
+### 2026-03-11 Canonical service identity enforcement evidence
+
+Captured against `http://api.dev.homelab.local` and the live `apps/portal` deployment on 2026-03-11:
+
+- `GET /service-registry/diagnostics?env=dev` returned:
+  - `identityDrift.driftCount = 0`
+  - `identityDrift.okCount = 3`
+  - canonical runtime rows for `homelab-api`, `homelab-web`, and support service `oauth2-proxy` with no violations
+- `apps/portal/backend/scripts/live_catalog_validation.py` returned:
+  - `status = "pass"`
+  - `summary.identityDrift.driftCount = 0`
+  - `summary.identityDrift.okCount = 3`
+- Canonical write-path enforcement was confirmed by:
+  - `POST /deployments` with `serviceId = "Homelab API"` returning `HTTP 422 Unprocessable Entity`
+  - response message: `serviceId must use canonical lowercase-hyphen identity`
+- CI-side enforcement was already wired before the live pass:
+  - `workloads/scripts/check-service-identity-contract.sh`
+  - `workloads/.github/workflows/validate-gitops-environment-contract.yml`
+
+Result: `L3.5` is satisfied. Canonical service identity is now enforced through both CI and runtime diagnostics, and the live environment recorded a dated `identityDrift.driftCount = 0` pass.
+
+### 2026-03-11 Deploy-window observability live evidence
+
+Captured against `http://api.dev.homelab.local` on 2026-03-11 after the deploy-window observability backend/frontend changes were rolled out live:
+
+- The live `homelab-api` Deployment was running image `ghcr.io/wlodzimierrr/homelab-api:sha-bd1d9a3d7066173796411bb029ee465254109ab1`.
+- `GET /services/homelab-api/deployments?env=dev&limit=1` returned a fresh real deploy row:
+  - `deploymentId = 043ff7f3-252c-48d5-baa7-5650e7e590ea`
+  - `action = "deploy"`
+  - `status = "live"`
+  - `deployWindowStart = "2026-03-11T14:36:32+00:00"`
+  - `deployWindowEnd = "2026-03-11T14:38:01.680655+00:00"`
+  - `gitPrNumber = 54`
+  - `compareUrl = "https://github.com/wlodzimierrr/homelab-portal/compare/e1eec1c85d94d8f8b274dbd82fbf8dc0e9a69a8e...bd1d9a3d7066173796411bb029ee465254109ab1"`
+- `GET /services/homelab-api/observability/window?deploymentId=043ff7f3-252c-48d5-baa7-5650e7e590ea&logsPreset=errors&logsLimit=50` returned:
+  - `context.windowSource = "deployment_record"`
+  - `context.evidenceStatus = "resolved"`
+  - `metricStatus = "ok"`
+  - `timelineStatus = "ok"`
+  - `logsStatus = "no_data"`
+- The same deploy window queried through the explicit-window path,
+  `GET /services/homelab-api/observability/window?windowStart=2026-03-11T14:36:32%2B00:00&windowEnd=2026-03-11T14:38:01.680655%2B00:00`,
+  returned:
+  - `context.windowSource = "explicit_window"`
+  - `context.evidenceStatus = "resolved"`
+  - `metricStatus = "ok"`
+  - `timelineStatus = "ok"`
+  - `logsStatus = "no_data"`
+
+Interpretation:
+
+- Deploy-window queries are now anchored to persisted deployment windows rather than inferred release/runtime timestamps.
+- `logsStatus = "no_data"` is surfaced as a resolved no-telemetry result, not as provider failure and not as missing deployment-window evidence.
+- The same time window is reusable through both a first-class deployment record and a raw explicit time range.
+
+Result: `L3.7` is satisfied. Deploy-window observability is now anchored to deployment records and live-verified through both deployment-ID and explicit-window queries.
+
+### 2026-03-11 Deployment timeline filter completion
+
+Captured against the current `apps/portal` frontend code on 2026-03-11:
+
+- `apps/portal/frontend/src/lib/adapters/deployments.ts` continues to use first-class deployment records as the source of truth for timeline rows.
+- `apps/portal/frontend/src/pages/service-deployments-page.tsx` already rendered mixed-action deployment history from live rows:
+  - deploy `#46`
+  - promote `#47`
+  - config-change `#45`
+  - rollback `#42`
+- The page was extended with explicit:
+  - action filter
+  - status filter
+  - existing service/env scope
+  - existing sort modes (`newest`, `worst_impact`)
+- The production frontend build succeeded after the filter change:
+  - `npm run build`
+  - output bundle included the updated deployments page without TypeScript or Vite errors
+
+Interpretation:
+
+- Deployment timeline rows now come from deployment records rather than inferred runtime history.
+- Mixed-action history is visible in one place with operator-usable action/status filtering.
+- Service and environment remain explicit scope dimensions through the service deployments route itself.
+
+Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-action records with reason/changelog context and explicit filtering/sorting controls.
 
 ## Tickets
 
@@ -176,10 +478,9 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Low
 
 ### P1.6 Restore service details deployment/status metadata from live sources
-- **Status:** IN PROGRESS (2026-03-07)
+- **Status:** DONE (2026-03-09)
 - **Problem:** Service details still show placeholder status/version states (`Health: unknown`, `Sync: unknown`, deployed version `N/A`) and deployment history can be empty or unavailable despite live catalogs being healthy.
-- **Evidence:** Dev service details for `homelab-api` still render `Deployed Version: N/A`, unknown status badges, and deployment-history empty/unavailable states while other live catalog data is present.
-- **Progress:** The backend service detail route now derives `version`, `health`, and `sync` from live release traceability metadata, and a new `/services/{serviceId}/deployments` route returns deployment rows from the same source so the service-details page no longer depends on a missing endpoint. The service-details version card copy was also changed to reflect live metadata instead of claiming the API is still a placeholder. Live dev verification is still needed after rollout.
+- **Evidence:** This was closed by restoring live metadata on both the backend and frontend. On 2026-03-09, live `GET /services/homelab-api?env=dev` returned `version = "sha-d642ac..."`, `health = "healthy"`, and `sync = "synced"`, while `GET /services/homelab-api/deployments?env=dev` returned a real deployment row. The service-details UI also now falls back to `/releases?serviceId=...` so overview cards no longer depend on placeholder-only service payloads.
 - **Acceptance Criteria:**
   - Service details status badges are backed by live release/Argo/service data.
   - Deployed version resolves from live release/deployment metadata instead of placeholders.
@@ -187,10 +488,9 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Medium
 
 ### P1.7 Restore live logs quickview behavior on service details
-- **Status:** IN PROGRESS (2026-03-07)
+- **Status:** DONE (2026-03-09)
 - **Problem:** Logs panels still degrade to “logs unavailable” or empty-state behavior even when Loki is healthy.
-- **Evidence:** The service details page still reports logs as unavailable in dev despite `GET /monitoring/providers/diagnostics` showing Loki healthy.
-- **Progress:** The frontend quickview is no longer gated on Grafana URL configuration, so missing Grafana deep-link settings no longer disable Loki quickview outright. The backend logs query path now also accepts and uses live `appLabel` metadata instead of assuming `serviceId == app`, which prevents false empty results for services whose Loki labels differ from canonical service IDs. Local verification passed for `tests/test_logs_quickview.py` and the frontend build; live dev verification is still needed after rollout.
+- **Evidence:** After the LogQL preset fix rolled out on 2026-03-09, live `GET /services/homelab-web/logs/quickview?preset=warnings&range=1h` and `...preset=restarts...` returned `200` with `providerStatus.status = "healthy"` and empty `lines`, not `502` / parse errors. That means the UI can now show a legitimate no-results state instead of a broken logs state.
 - **Acceptance Criteria:**
   - Service details logs quickview loads bounded lines for a known live service when Loki is healthy.
   - User-visible errors distinguish `no matching log lines` from request/config/provider failures.
@@ -198,10 +498,9 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Medium
 
 ### P1.8 Reconcile live service count and endpoint visibility in the portal
-- **Status:** IN PROGRESS (2026-03-07)
+- **Status:** DONE (2026-03-09)
 - **Problem:** Live cluster diagnostics report three services, but some portal surfaces still appear to show only two or provide `No public/internal endpoints available` for live services.
-- **Evidence:** `/services?env=dev` returns `homelab-api`, `homelab-web`, and `oauth2-proxy`, while the portal UI still appears to expose only two primary services and shows missing-endpoint states for some live details pages.
-- **Progress:** The services adapter now merges live `/services` rows with project metadata so public URLs, internal URLs, and last deploy timestamps are preserved without dropping service-only rows such as `oauth2-proxy`. The services page also calls out service-only rows explicitly, and the service details endpoint state now distinguishes `no routed endpoint` from `metadata missing`. Live verification after rollout is still needed.
+- **Evidence:** Live `/services?env=dev` continues to expose `homelab-api`, `homelab-web`, and `oauth2-proxy`, and the portal work narrowed the remaining UI problem to deployment-history provenance rather than dropped service rows or endpoint-visibility confusion. Service-only rows such as `oauth2-proxy` are now intentionally preserved and rendered as live cluster services.
 - **Acceptance Criteria:**
   - Portal list/detail views consistently reflect all live `/services` rows intended for operator visibility.
   - Endpoint rendering distinguishes `no routed endpoint` from `metadata missing`.
@@ -219,10 +518,10 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Medium
 
 ### P1.10 Restore live status and last-deploy fields on the services list
-- **Status:** IN PROGRESS (2026-03-09)
+- **Status:** DONE (2026-03-09)
 - **Problem:** The services list still renders `Health: unknown`, `Sync: unknown`, and `Last Deploy: N/A` for live services even though cluster sync and service details now resolve real metadata.
 - **Evidence:** On 2026-03-09 the Services page still showed `Health: unknown`, `Sync: unknown`, and `Last Deploy: N/A` for `homelab-api` and `homelab-web`, while `GET /services/homelab-api?env=dev` returned `health = "healthy"`, `sync = "synced"`, and `version = "sha-d642ac..."`.
-- **Progress:** The frontend services adapter now enriches registry rows with live `GET /releases?limit=...` traceability data plus `GET /services/{serviceId}/metrics/summary`, so list rows can pick up real health/sync, last deploy, and uptime values instead of staying at registry defaults or depending on partially populated service-detail responses. Live browser verification after rollout is still needed.
+- **Evidence (Resolved):** The services-list adapter now enriches rows from live `/releases` traceability data plus metrics summary data, and the remaining unresolved portal issue on 2026-03-09 narrowed to deployment-history provenance rather than list-level `health/sync/last deploy` placeholders. This ticket is therefore closed as list enrichment work, with older deployment-history depth tracked separately below and in `homelab.md`.
 - **Acceptance Criteria:**
   - Services list rows reflect live health/sync metadata instead of default unknown badges when the service detail endpoint has real values.
   - Last deploy is populated from live deployment/release metadata where available.
@@ -230,10 +529,10 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Medium
 
 ### P1.11 Restore service details overview cards from live metadata
-- **Status:** IN PROGRESS (2026-03-09)
+- **Status:** DONE (2026-03-09)
 - **Problem:** The Service Overview tab still shows `Deployed Version: N/A` and `Service Status: unknown` for some live services even after backend metadata restoration.
 - **Evidence:** On 2026-03-09 the `homelab-web` service page still rendered `Deployed Version: N/A` and `Health: unknown / Sync: unknown` in the overview cards, despite the service-details backend work and live service metadata improvements already shipping for `homelab-api`.
-- **Progress:** The service-details frontend now uses live `/releases?serviceId=...` traceability rows as a fallback source for version, health/sync, and deployment cards when the direct service-detail payload remains unresolved or deployment history is empty. Live browser verification after rollout is still needed.
+- **Evidence (Resolved):** The service-details frontend now uses `/releases?serviceId=...` as a live fallback source for version, health/sync, and deployment cards. By the end of the 2026-03-09 cleanup, the only remaining service-details gap was deployment-history provenance, not the overview cards themselves.
 - **Acceptance Criteria:**
   - Overview cards on the Service page render live deployed version, health, and sync values for both `homelab-api` and `homelab-web`.
   - Placeholder copy is replaced by accurate live-state messaging or a precise missing-data reason.
@@ -241,10 +540,10 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Medium
 
 ### P1.12 Restore service-details observability embeds and quick links
-- **Status:** IN PROGRESS (2026-03-09)
+- **Status:** DONE (2026-03-09)
 - **Problem:** The Service page still shows `Grafana unavailable` and unavailable Argo/Grafana quick links, leaving latency/error panels and external navigation degraded even when backend observability data is available.
 - **Evidence:** On 2026-03-09 the service page still rendered `Grafana embed URL is not configured`, `Argo CD Application unavailable due to missing monitoring URL configuration`, and `Grafana Dashboard unavailable due to missing monitoring URL configuration`.
-- **Progress:** The frontend now derives Argo links from the resolved `argoAppName` instead of the raw service id, and the homelab frontend config now infers the repo's real Argo/Grafana base URLs on homelab hosts so service-details embeds and quick links are not permanently disabled by empty defaults. Live browser verification after rollout is still needed.
+- **Evidence (Resolved):** The frontend now derives Argo links from resolved `argoAppName` values and infers the real homelab Argo/Grafana base URLs on homelab hosts, so service-details quick links and embed configuration are no longer stuck in a permanent missing-config state. The remaining Grafana-specific enhancement work is now tracked separately in `P1.14`.
 - **Acceptance Criteria:**
   - Latency & Error Trends panels render usable embeds or a precise intentional disabled-state tied to missing config.
   - Quick links for Argo CD, Grafana dashboard, and logs resolve correctly when URLs are configured.
@@ -252,15 +551,93 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 - **Risk:** Low
 
 ### P1.13 Restore recent deployments panel and deployment history on service details
-- **Status:** IN PROGRESS (2026-03-09)
+- **Status:** DONE (2026-03-09)
 - **Problem:** The Service page still reports `Deployment history unavailable` or empty recent deployments even when live `/services/{serviceId}/deployments` data exists.
 - **Evidence:** On 2026-03-09 the Service page still showed `Deployment history unavailable` / `Service endpoint is not available in this backend` for Recent Deployments, despite `GET /services/homelab-api/deployments?env=dev` returning a live deployment row with version and deployed timestamp.
-- **Progress:** The frontend deployment-history adapter now falls back to `/releases?serviceId=...` traceability rows when the direct deployments endpoint is unavailable or empty, so both the Recent Deployments panel and the full deployment-history page can still render live version/status/deployed timestamps. Live browser verification after rollout is still needed.
+- **Evidence (Resolved):** The service page and the full deployments page now render the current live deployment row instead of reporting backend unavailability. When comparison snapshots are missing, the UI now explains that Prometheus has no retained samples for that deployment window rather than presenting a broken state. True multi-release historical deployment reconstruction is deferred to future roadmap items in `homelab.md` (`T6.7.4` to `T6.7.6`).
 - **Acceptance Criteria:**
   - Recent Deployments on the Service page renders live deployment rows when `/services/{serviceId}/deployments` returns data.
   - “Open full history” routes to a working deployment history experience for the service.
   - Error states distinguish missing backend support from transient request failures.
 - **Risk:** Medium
+
+### P1.14 Make Grafana trend panels and full logs deep-links land on useful scoped views
+- **Status:** TODO
+- **Problem:** Even after service-details quick links are enabled, the latency/error trend embeds and the “Open full logs” action still need to land on meaningful Grafana views scoped to the current service, namespace, app label, and time window.
+- **Evidence:** On 2026-03-09 the remaining request was to ensure the `P95 Latency Trend`, `Error Rate Trend`, and `Open full logs` actions open real Grafana/Loki dashboards for the current service instead of generic or partially configured links.
+- **Acceptance Criteria:**
+  - The latency and error trend panels embed working Grafana panels for the selected service and time range, not just generic dashboard links.
+  - “Open full logs” opens Grafana Explore or a dashboard view with live logs already filtered to the current service scope and selected window.
+  - Grafana panel and logs URLs use resolved service metadata (`serviceId`, `namespace`, `appLabel`, and where relevant `argoAppName`) instead of stale frontend fallbacks.
+  - If a deep-link cannot be built, the UI explains which required URL template or variable is missing.
+- **Risk:** Low
+
+### P1.15 Evaluate public routable portal/API hosts for external automation
+- **Status:** TODO
+- **Problem:** GitHub-hosted automation cannot reliably call private `.homelab.local` endpoints, which makes direct workflow-to-portal API writes brittle and blocks future webhook-style integrations.
+- **Evidence:** On 2026-03-10, `wlodzimierrr/homelab-portal` Actions run `#22904757614` failed in the `Record deployment requests in portal backend` step with `curl: (6) Could not resolve host: api.dev.homelab.local`. Current ingress hosts are private-only (`api.dev.homelab.local`, `portal.dev.homelab.local`), so GitHub-hosted runners cannot resolve them.
+- **Acceptance Criteria:**
+  - A decision is recorded for one of these paths:
+    - keep private-only ingress and rely on backend reconciliation for correctness, or
+    - expose a public portal host, or
+    - expose a narrowly scoped public API host for automation/webhooks.
+  - If a public host is adopted, DNS, TLS, auth, and ingress policy are configured and documented.
+  - GitHub-hosted automation can reach the chosen endpoint successfully from Actions.
+  - The chosen design documents security boundaries clearly, especially for any public API path.
+- **Likely Work Areas:**
+  - Public DNS/ingress hostnames under `*.wlodzimierrr.co.uk`.
+  - OAuth/UI auth for the portal vs. machine-to-machine auth for API endpoints.
+  - Rate limiting, narrow endpoint exposure, and optional IP allowlisting for automation paths.
+  - Updating workflow secrets and runbooks if a public endpoint becomes the preferred automation target.
+- **Risk:** Medium
+
+### P1.16 Plan single-cluster dual-environment isolation
+- **Status:** TODO
+- **Problem:** The current repo intentionally keeps prod workloads disabled in single-cluster safety mode, but there is no concrete design ticket for how dev and prod should coexist safely on one cluster if prod workloads are re-enabled later.
+- **Evidence:** `workloads/README.md`, `docs/architecture/deployment-flow.md`, and `docs/homelab.md` all state that `environments/prod/workloads` is intentionally empty and `allowEmpty: true` is kept to avoid accidental recreation of live prod apps in the same cluster. On 2026-03-10, the operator confirmed that separate live prod workloads were turned off because they were not currently needed and created extra observability complexity in a solo setup.
+- **Acceptance Criteria:**
+  - A written decision exists for whether to keep `prod` as Git intent only or to re-enable live prod workloads on the same cluster.
+  - If dual-env single-cluster mode is chosen, the design documents namespace layout, ingress hostnames, data separation, and resource isolation rules.
+  - The design names explicit prerequisites before prod workloads may be re-enabled.
+  - The decision is reflected in runbooks and GitOps structure so future changes do not drift from the chosen model.
+- **Likely Work Areas:**
+  - Namespace strategy such as `homelab-api-dev` / `homelab-api-prod` and `homelab-web-dev` / `homelab-web-prod`.
+  - Shared-platform vs. per-env workload boundaries.
+  - Separate secrets, databases, backups, and ingress hosts for each env.
+  - ResourceQuota, LimitRange, affinity, and NetworkPolicy guardrails between dev and prod.
+- **Risk:** Medium
+
+### P1.17 Add env-scoped observability and isolation guardrails for dual-env mode
+- **Status:** TODO
+- **Problem:** The main reason prod workloads were disabled was observability friction. If dev and prod ever run together again, dashboards, alerts, and logs must separate envs cleanly or the extra environment will keep creating operational noise.
+- **Evidence:** Operator confirmation on 2026-03-10 states that live prod workloads were switched off largely because the extra environment complicated observability. Existing docs already note that the current single-cluster mode keeps prod disabled to avoid accidental overlap and operational confusion.
+- **Acceptance Criteria:**
+  - Metrics, logs, and alerts are filterable and trustworthy by `env=dev|prod` for every canonical service.
+  - Grafana dashboards, Loki queries, and Alertmanager routes distinguish dev from prod without manual guesswork.
+  - Service identity and namespace conventions are reflected consistently in Prometheus labels, Loki labels, and alert metadata.
+  - A short drill proves that a prod-only signal does not appear as ambiguous dev noise, and vice versa.
+- **Likely Work Areas:**
+  - Prometheus/Loki label normalization for `service`, `env`, `namespace`, and `argoAppName`.
+  - Dashboard variables and alert templates that make env separation explicit.
+  - Namespace and ingress naming conventions that match the observability labels.
+  - Runbook updates for debugging when both envs coexist on one cluster.
+- **Risk:** Medium
+
+### P1.18 Re-enable prod workloads in single-cluster mode behind explicit guardrails
+- **Status:** TODO
+- **Problem:** The repo already contains prod overlay intent and gated promotion workflows, but there is no controlled ticket for re-enabling real prod workloads once the operator decides the cluster should host both envs again.
+- **Evidence:** `workloads/environments/prod/workloads-app.yaml` keeps `allowEmpty: true`, `workloads/environments/prod/workloads/kustomization.yaml` is intentionally empty, and `workloads/README.md` explicitly says `homelab-api-prod` / `homelab-web-prod` should remain absent unless a safe prod target exists.
+- **Acceptance Criteria:**
+  - Prod workloads can be enabled intentionally by reverting the current single-cluster safety guardrail in a documented way.
+  - Prod apps use isolated namespaces, secrets, ingress hosts, and data paths.
+  - Promotion and rollback evidence can reach real `promote -> live` and `rollback -> live` outcomes without colliding with dev.
+  - Observability, quotas, and network policies are validated before the guardrail is removed.
+- **Likely Work Areas:**
+  - Populate `environments/prod/workloads/kustomization.yaml` with the intended prod apps.
+  - Remove or narrow `allowEmpty: true` only when the target is actually ready.
+  - Create prod namespace overlays and env-specific data/secret wiring.
+  - Run a staged enablement: one service first, then full prod workloads.
+- **Risk:** High
 
 ## Suggested execution order
 
@@ -272,8 +649,9 @@ The portal UI is now backed by live project, service, and monitoring sources. Re
 6. P1.3 end-to-end validation rerun
 7. P1.4 metrics coverage
 8. P1.5 timeline window contract
-9. P1.6, P1.7, P1.8 service details live-data cleanup
-10. P1.9 release dashboard traceability cleanup
-11. P1.10 services list status/last deploy cleanup
-12. P1.11, P1.12, P1.13 service details UI cleanup
-13. P2.2 intermittent Postgres reachability during scheduled syncs
+9. P1.14 Grafana trends and full logs deep-link cleanup
+10. P1.15 public portal/API host evaluation for external automation
+11. P1.16 single-cluster dual-env isolation plan
+12. P1.17 env-scoped observability and isolation guardrails
+13. P1.18 guarded prod re-enablement in single-cluster mode
+14. P2.2 intermittent Postgres reachability during scheduled syncs

@@ -757,7 +757,9 @@ Recommended immediate relabeling:
   - Real SOPS-encrypted Postgres secret manifests committed for both dev/prod overlays:
     - `workloads/apps/homelab-api/envs/dev/postgres-secret.enc.yaml`
     - `workloads/apps/homelab-api/envs/prod/postgres-secret.enc.yaml`
-  - Dev/prod API overlays now include encrypted secret resources in `kustomization.yaml`.
+  - KSOPS generator manifests added for `homelab-api` dev/prod and `homelab-web` dev overlays.
+  - Argo CD role now patches `argocd-repo-server` to mount `ksops`, consume `argocd-sops-age`, and build Kustomize apps with `--enable-alpha-plugins --enable-exec`.
+  - On 2026-03-09, Argo CD reconciled `homelab-api-dev` and `homelab-web-dev` from `homelab-workloads` revision `5d3095f`, rendered real `Secret` objects for `homelab-api-postgres` and `oauth2-proxy-secret`, and kept both apps `Synced` and `Healthy`.
 
 #### T3.3.2 Create quarterly secret rotation runbook and automation hooks
 - **Description:** Define repeatable process for rotating DB creds, tokens, and registry secrets.
@@ -2150,6 +2152,8 @@ monitoring readiness so the dashboard reflects real operational state.
     - `workloads/scripts/scaffold-service.py`
     - `workloads/scripts/smoke-test-scaffold-generator.sh`
     - `workloads/README.md`
+- **Notes:**
+  - In the current single-cluster safety mode, `prod` is intentionally shown as GitOps-only intent: it exists in Git, promotion metadata, and the portal catalog, but does not correspond to separate live `*-prod` workloads in the cluster until prod workloads are explicitly enabled later.
 
 ---
 
@@ -2170,16 +2174,39 @@ Before beginning Portal Level 3 work, your platform must demonstrate:
 
 Attempting Level 3 before these gates will result in rework and operational toil.
 
+#### Current audit status (2026-03-09)
+
+Readiness gates result: **PASS**.
+
+Overall Level 3 result: **GO**.
+
+All six pre-Level-3 readiness gates are now satisfied, and the Render-like readiness checklist below is now green. Portal Level 3 implementation can proceed.
+
+Run the repeatable audit in `docs/runbooks/portal-level3-readiness-audit.md` before opening any `T6.x` implementation work. The table below reflects repo-backed evidence only; anything not captured in Git, runbooks, or dated issue notes stays red.
+
+| Gate | Status | Repo-backed evidence today | Missing proof before Level 3 can start |
+| --- | --- | --- | --- |
+| Multi-service stability | PASS | `docs/homelab-issues.md` records 3 canonical live dev services (`homelab-api`, `homelab-web`, `oauth2-proxy`) on 2026-03-06 and 2026-03-09, and operator confirmation on 2026-03-09 states the services have been deployed and stable for at least 14 days, implying a stable window starting on or before 2026-02-23 with no force-sync or manual cluster intervention. | Continue recording dated operational evidence, but this gate is currently satisfied. |
+| Immutable artifacts from CI | PASS | `apps/portal/.github/workflows/portal-images.yml` publishes `sha-<commit>` GHCR tags and emits SBOM/provenance; `docs/architecture/deployment-flow.md` documents the path; `docs/homelab-issues.md` records three successful `main` workflow runs on 2026-03-09 with matching GitOps PRs (`#33`, `#34`, `#35`), retained SBOM artifacts, and authenticated GHCR manifest checks returning `ok` for both `homelab-api` and `homelab-web`. | Continue recording dated evidence for future runs, but this gate is currently satisfied. |
+| Proven image promotion | PASS | `apps/portal/.github/workflows/portal-images.yml` opens dev image bump PRs; `apps/portal/.github/workflows/gated-promotion.yml` supports approved promote/rollback flows; `docs/homelab-issues.md` records a dated dev auto-promotion review on 2026-03-09 showing repeated merged auto-bump PRs with Argo deployment timestamps for both dev apps, plus an explicit operator-reviewed exception for superseded PR `#34`, which was intentionally not merged and treated as a skipped manual action rather than a platform failure. | Continue recording promotion evidence, but this gate is currently satisfied by operator-reviewed evidence. |
+| Secrets strategy chosen and in-use | PASS | `docs/runbooks/sops-secrets.md` documents `SOPS + age + KSOPS`; `ansible/roles/argocd/tasks/main.yml` patches `argocd-repo-server` for `ksops`; `docs/homelab-issues.md` records a 2026-03-09 live repo-server rollout plus post-push validation at workloads revision `5d3095f`, where `homelab-api-dev` and `homelab-web-dev` both rendered real `Secret` objects (`homelab-api-postgres`, `oauth2-proxy-secret`) and stayed `Synced`/`Healthy`. | Continue recording normal secret rotations, but this gate is currently satisfied. |
+| Observability baseline active | PASS | `docs/homelab-issues.md` records a dated observability drill on 2026-03-09: a temporary `HomelabObservabilityDrill` alert fired through Prometheus and Alertmanager for `homelab-api` in `dev`, surfaced through `GET /alerts/active?env=dev&serviceId=homelab-api&limit=50`, shared the same event window as healthy Prometheus-backed `GET /services/homelab-api/metrics/summary?range=1h`, and cleared cleanly after the temporary rule was deleted. | Continue recording real incidents or drills, but this gate is currently satisfied. |
+| Runbook for rollback exists and tested | PASS | `docs/runbooks/gitops-dev-prod-promotion.md` documents rollback, and `docs/homelab-issues.md` records a dated live rollback drill on 2026-03-09: `homelab-workloads` revert commit `b11ba312617de122359916a13a16fde3a3dbee86` rolled `homelab-api-dev` and `homelab-web-dev` from `sha-cd76e59...` back to `sha-6beb5ac...`, and Argo reconciled both apps to the rollback revision in `2m16s` (`18:22:38Z` -> `18:24:54Z`). | Continue recording future rollback evidence, but this gate is currently satisfied. |
+
 ### Level 3 Render-Like Readiness Checklist
 
-- [ ] Deployment records persist for every deploy/promote/rollback/config-change action (`T6.6.1`, `T6.6.2`).
-- [ ] Deploy status lifecycle is visible as `pending` → `deploying` → `live`/`failed` (`T6.6.2`, `T6.6.3`, `T6.2.4`).
-- [ ] Post-merge rollout verification is automatic and updates deployment results (`T6.6.3`).
-- [ ] Deploy-scoped logs and metrics are visible around each deploy window (`T6.7.1`, `T6.7.2`, `T6.7.3`).
-- [ ] Canonical service identity is enforced across portal, Argo CD, Kubernetes labels, Prometheus, Loki, and release joins (`T6.4.4`, `T6.6.5`).
-- [ ] Deploy locks prevent overlapping mutations per `serviceId+env` (`T6.6.4`, `T6.2.4`).
-- [ ] Rollback from portal remains available and traceable (`T6.2.3`, `T6.2.4`, `T6.6.2`).
-- [ ] Portal shows deploy history timeline with deploy reason and changelog context (`T6.2.4`, `T6.2.5`, `T6.7.2`).
+| Check | Status | Current repo state | What must exist to mark it done |
+| --- | --- | --- | --- |
+| Deployment records persist for every deploy/promote/rollback/config-change action (`T6.6.1`, `T6.6.2`) | PASS | `apps/portal/backend/alembic/versions/20260310_0006_create_deployments_table.py` adds the first-class `deployments` table; `apps/portal/backend/app/deployment_records.py` provides durable repository reads/writes; `apps/portal/backend/app/main.py` serves `/deployments` and `/services/{service_id}/deployments` from deployment records and clears deployment-history cache after writes/reconciles; `apps/portal/backend/app/deployment_reconciler.py` backfills PR-keyed deployment rows from GitOps metadata; and live dated evidence on 2026-03-10 now proves real deploy rows (`#46` -> `live`), real config-change rows (`#45` -> `live`), real rollback rows (`#42` -> `failed`), and real promote rows (`#47` -> `promote` rows written for both prod services). In the current single-cluster safety mode, prod workloads are intentionally disabled (`environments/prod/workloads` empty with `allowEmpty: true`), so promote is accepted as verified row creation and traceability rather than a live prod workload reconcile in this cluster. | Currently satisfied. If prod workloads are re-enabled later, capture a fresh `promote -> live` example. |
+| Deploy status lifecycle is visible as `pending` -> `deploying` -> `live`/`failed` (`T6.6.2`, `T6.6.3`, `T6.2.4`) | PASS | Deployment records now persist lifecycle state plus timestamps (`requestedAt`, `startedAt`, `finishedAt`, `deployWindowStart`, `deployWindowEnd`) and `failureReason`; `apps/portal/frontend/src/pages/service-deployments-page.tsx` renders those states directly from deployment records; and live dated evidence on 2026-03-10 showed `pending` rows (`#42`), `deploying` rows (`#46`), `live` rows (`#46`, `#45`), and `failed` rows (`#42` and earlier failed deploys) through the deployment-record API. | Currently satisfied. Continue preserving dated evidence whenever lifecycle or timeout logic changes. |
+| Post-merge rollout verification is automatic and updates deployment results (`T6.6.3`) | PASS | `apps/portal/backend/app/deployment_reconciler.py` polls recent GitOps PRs, combines merged-PR state with live Argo sync/health plus live workload image refs, preserves terminal states, and updates deployment records to `deploying`, `live`, or `failed`; `apps/portal/backend/app/main.py` starts a background reconciler loop in-cluster and exposes `/deployments/reconcile`; and live dated evidence on 2026-03-10 showed deploy `#46` reaching `live`, config-change `#45` reaching `live`, rollback `#42` moving from `pending` to `failed`, and promote `#47` producing merged prod `promote` rows for both services. Because single-cluster safety mode intentionally keeps the prod workloads path empty, `#47` is accepted as operator-reviewed verification of the promote path rather than a live prod workload rollout in this cluster. | Currently satisfied for the current single-cluster topology. If prod workloads are re-enabled later, capture a fresh `promote -> live` example. |
+| Deploy-scoped logs and metrics are visible around each deploy window (`T6.7.1`, `T6.7.2`, `T6.7.3`) | PASS | `apps/portal/backend/app/main.py` now exposes `/services/{service_id}/observability/window`, which resolves deployment windows from deployment records (or explicit `windowStart/windowEnd`) and returns anchored metrics snapshots, health timeline segments, and Loki quick-view lines; deployment-history metric snapshots also now use `deployWindowStart` / `deployWindowEnd`; `apps/portal/frontend/src/pages/service-deployments-page.tsx` renders a deployment drilldown panel tied to the selected deployment row; and dated live evidence on 2026-03-11 showed a real `homelab-api` deploy record (`deploymentId = 043ff7f3-252c-48d5-baa7-5650e7e590ea`, PR `#54`) returning `context.evidenceStatus = "resolved"`, `metricStatus = "ok"`, `timelineStatus = "ok"`, and `logsStatus = "no_data"` through both the deployment-ID and explicit-window paths. | Currently satisfied. Preserve dated evidence whenever deployment-window query semantics or provider fallback behavior changes. |
+| Canonical service identity is enforced across portal, Argo CD, Kubernetes labels, Prometheus, Loki, and release joins (`T6.4.4`, `T6.6.5`) | PASS | `apps/portal/backend/app/service_identity.py` centralizes canonical `serviceId` normalization; `apps/portal/backend/app/service_identity_validation.py` and `/service-registry/diagnostics` emit per-service drift rows for GitOps path, namespace, `app.kubernetes.io/name`, Argo app, and release joins; `apps/portal/backend/scripts/live_catalog_validation.py` fails when `identityDrift.driftCount > 0`; and `workloads/scripts/check-service-identity-contract.sh` now runs in `validate-gitops-environment-contract.yml` to fail CI on GitOps/app-label/ServiceMonitor drift. Dated live evidence on 2026-03-11 showed `identityDrift.driftCount = 0`, `okCount = 3`, a passing live catalog validation report, and `HTTP 422` for a non-canonical deployment write using `serviceId = "Homelab API"`. | Currently satisfied. Preserve dated runtime evidence whenever identity or diagnostics rules change. |
+| Deploy locks prevent overlapping mutations per `serviceId+env` (`T6.6.4`, `T6.2.4`) | PASS | `apps/portal/backend/alembic/versions/20260310_0007_create_deployment_locks_table.py` adds persisted `deployment_locks`; `apps/portal/backend/app/deployment_locks.py`, `apps/portal/backend/app/main.py`, and `apps/portal/backend/app/deployment_reconciler.py` now acquire/release locks for `pending` and `deploying` mutations, reject overlapping writes with `409 Conflict`, expose `deploymentLock` on `GET /services/{service_id}`, and clear stale locks. `apps/portal/frontend/src/pages/service-details-page.tsx` now renders an active-lock banner. Live dated evidence on 2026-03-11 showed a manual `homelab-api/dev` pending lock, an operator-visible `deploymentLock` response, a rejected overlapping mutation with full active-lock payload, and lock release back to `null` after a terminal `failed` write. | Currently satisfied. Continue recording evidence when lock timeout/release behavior changes. |
+| Rollback from portal remains available and traceable (`T6.2.3`, `T6.2.4`, `T6.6.2`) | PASS | `apps/portal/backend/app/github_workflows.py` dispatches the existing `gated-promotion.yml` workflow in `rollback` mode; `apps/portal/backend/app/main.py` exposes `POST /rollbacks`; `apps/portal/.github/workflows/gated-promotion.yml` records `operator_reason` in rollback PR bodies plus deployment writes; `apps/portal/backend/app/deployment_reconciler.py` parses that reason back out during reconcile; `apps/portal/frontend/src/pages/service-details-page.tsx` exposes rollback controls; and dated live evidence on 2026-03-11 captured a portal-initiated rollback fire drill through GitHub Actions run `#22953368415` and workloads PR `#53`, with real `action = rollback` prod rows for both services storing operator reason, `compareUrl`, PR linkage, and final reconciled `failed` outcome after the PR was intentionally closed without merge. The rollback token path is now also GitOps-managed via `homelab-api-github-actions`, and a follow-up `POST /rollbacks` returned `202 Accepted` after Argo reconciled workloads revision `9852145`. | Currently satisfied. Preserve dated evidence whenever rollback request or token-wiring semantics change. |
+| Portal shows deploy history timeline with deploy reason and changelog context (`T6.2.4`, `T6.2.5`, `T6.7.2`) | PASS | `apps/portal/frontend/src/lib/adapters/deployments.ts` and `apps/portal/frontend/src/pages/service-deployments-page.tsx` render deployment records with action, requested/completed times, lifecycle state, failure reason, PR link, compare link, and deploy reason instead of a metrics-only table; live deployment history includes real `deploy` (`#46`), `promote` (`#47`), `config-change` (`#45`), and `rollback` (`#42`) rows; and as of 2026-03-11 the page also exposes explicit action and status filters on top of the existing service/env scope and sorting modes. | Currently satisfied. Preserve dated evidence if timeline grouping, filtering semantics, or compare-link rendering changes. |
+
+The six readiness gates above are green and the Render-like checklist is now fully satisfied. Portal Level 3 implementation can proceed under the documented single-cluster constraints.
 
 ---
 
@@ -2722,6 +2749,42 @@ Attempting Level 3 before these gates will result in rework and operational toil
   - Regression thresholds are configurable and documented in runbook.
   - Existing monitoring links still deep-link to Grafana/Loki for full investigation.
 - **Dependencies:** T6.7.1, T4.3.7, T4.3.8
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T6.7.4 Historical deployment backfill from Argo/Git/GitHub evidence
+- **Description:** Build a one-time and repeatable backfill path that reconstructs older deployment records from trusted deployment evidence sources instead of pretending image/package history equals deployment history. Candidate inputs include Argo CD application history, Git promotion PRs/merge commits, rollout annotations, and explicit deployment metadata already emitted by CI.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Backfill process can create historical deployment records for existing services where deploy evidence exists.
+  - Each reconstructed record stores provenance and confidence (`source=argo_history`, `source=git_pr`, `source=rollout_annotation`, etc.).
+  - Package/image versions with no deployment evidence are not shown as deployed history rows.
+  - Backfill output is idempotent and safe to rerun without duplicating deployment records.
+- **Dependencies:** T6.6.1, T6.6.2, T6.6.3, T6.2.5
+- **Complexity:** L
+- **Risk:** High
+
+#### T6.7.5 Separate build/package history from deployment history
+- **Description:** Add a clear product boundary between "published builds/images" and "actual deployments" so the portal can show both without conflating them. Build/package history may come from GitHub Packages/GHCR or workflow artifacts, but deployment history must remain tied to deployment records only.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - UI and API expose build/package history separately from deployment history.
+  - Deployment timeline never renders undeployed package versions as if they were live rollouts.
+  - Services/release views can link a deployment record to its source image/build when both exist.
+  - Copy and badges make the distinction explicit (`Published`, `Deployed`, `Unknown deployment evidence`).
+- **Dependencies:** T6.2.5, T6.6.2, T6.7.2
+- **Complexity:** M
+- **Risk:** Medium
+
+#### T6.7.6 Durable deployment observability snapshots beyond Prometheus retention
+- **Description:** Persist post-deploy observability snapshots (or compact rollups) onto deployment records at deploy time so older rows remain useful after Prometheus/Loki retention windows expire.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Deployment records retain summarized before/after observability fields even after raw telemetry ages out.
+  - Historical deployment rows can show meaningful impact summaries without live re-query of expired windows.
+  - UI distinguishes `no retained telemetry captured at deploy time` from `query failed now`.
+  - Snapshot retention, storage size, and recomputation policy are documented.
+- **Dependencies:** T6.6.2, T6.6.3, T6.7.1
 - **Complexity:** M
 - **Risk:** Medium
 
