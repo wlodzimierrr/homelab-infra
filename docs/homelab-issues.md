@@ -1,6 +1,6 @@
 # Homelab Portal Issues
 
-Last updated: 2026-03-10
+Last updated: 2026-03-11
 
 ## Current dev state
 
@@ -543,7 +543,7 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 - **Status:** DONE (2026-03-09)
 - **Problem:** The Service page still shows `Grafana unavailable` and unavailable Argo/Grafana quick links, leaving latency/error panels and external navigation degraded even when backend observability data is available.
 - **Evidence:** On 2026-03-09 the service page still rendered `Grafana embed URL is not configured`, `Argo CD Application unavailable due to missing monitoring URL configuration`, and `Grafana Dashboard unavailable due to missing monitoring URL configuration`.
-- **Evidence (Resolved):** The frontend now derives Argo links from resolved `argoAppName` values and infers the real homelab Argo/Grafana base URLs on homelab hosts, so service-details quick links and embed configuration are no longer stuck in a permanent missing-config state. The remaining Grafana-specific enhancement work is now tracked separately in `P1.14`.
+- **Evidence (Resolved):** The frontend now derives Argo links from resolved `argoAppName` values and infers the real homelab Argo/Grafana base URLs on homelab hosts, so service-details quick links and embed configuration are no longer stuck in a permanent missing-config state. Follow-on polish for scoped Grafana/Loki drill-downs and the portal-native logs/trend presentation was completed in `P1.14`.
 - **Acceptance Criteria:**
   - Latency & Error Trends panels render usable embeds or a precise intentional disabled-state tied to missing config.
   - Quick links for Argo CD, Grafana dashboard, and logs resolve correctly when URLs are configured.
@@ -562,12 +562,12 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 - **Risk:** Medium
 
 ### P1.14 Make Grafana trend panels and full logs deep-links land on useful scoped views
-- **Status:** TODO
-- **Problem:** Even after service-details quick links are enabled, the latency/error trend embeds and the “Open full logs” action still need to land on meaningful Grafana views scoped to the current service, namespace, app label, and time window.
-- **Evidence:** On 2026-03-09 the remaining request was to ensure the `P95 Latency Trend`, `Error Rate Trend`, and `Open full logs` actions open real Grafana/Loki dashboards for the current service instead of generic or partially configured links.
+- **Status:** DONE (2026-03-11)
+- **Problem:** The service-details page needed useful scoped drill-downs for trends and full logs, but brittle Grafana iframe behavior made the page depend on a visualization path that was not reliable across services.
+- **Evidence:** On 2026-03-11, the service-details page was completed with portal-native `P95 Latency Trend` and `Error Rate Trend` cards driven by the backend metrics fallback logic instead of iframe-only Grafana embeds, while keeping scoped `Open in Grafana` drill-downs built from resolved `serviceIdentity` metadata (`serviceId`, `namespace`, `appLabel`, `env`, `argoAppName`, and time range). The page also gained a proper console-style logs viewer above the rollback panel, defaulting to `All logs` with optional `Errors`, `Warnings`, and `Restarts` filters, while preserving the older logs panel below. `apps/portal/frontend/src/pages/service-details-page.tsx`, `apps/portal/frontend/src/lib/adapters/logs-quickview.ts`, `apps/portal/backend/app/logs_quickview.py`, and `apps/portal/backend/app/main.py` were updated, and `npm run build`, `python -m compileall app scripts`, and `python scripts/generate_openapi.py` all passed.
 - **Acceptance Criteria:**
-  - The latency and error trend panels embed working Grafana panels for the selected service and time range, not just generic dashboard links.
-  - “Open full logs” opens Grafana Explore or a dashboard view with live logs already filtered to the current service scope and selected window.
+  - Native latency and error trend cards render from portal/backend data for the selected service and time range, without relying on fragile iframe embeds.
+  - “Open in Grafana” and “Open full logs” resolve to useful scoped Grafana/Loki views for the current service and selected window.
   - Grafana panel and logs URLs use resolved service metadata (`serviceId`, `namespace`, `appLabel`, and where relevant `argoAppName`) instead of stale frontend fallbacks.
   - If a deep-link cannot be built, the UI explains which required URL template or variable is missing.
 - **Risk:** Low
@@ -639,6 +639,86 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
   - Run a staged enablement: one service first, then full prod workloads.
 - **Risk:** High
 
+### P1.19 Define a universal service observability contract
+- **Status:** DONE (2026-03-11)
+- **Problem:** The platform needed an explicit service observability contract so future services could declare one authoritative HTTP metrics mode instead of relying on implicit backend fallback behavior.
+- **Evidence:** On 2026-03-11, live inspection showed `homelab-api` returning populated `p95LatencyMs` and `errorRatePct` because it has app-level Prometheus instrumentation plus a `ServiceMonitor`, while `homelab-web` returned only `uptimePct` and `restartCount`. The current backend metrics logic in `apps/portal/backend/app/main.py` already tries app metrics first and Traefik fallback second, but `workloads/apps/homelab-web/base/deployment.yaml` has no metrics endpoint or `ServiceMonitor`, and there is no repo-level declaration saying whether a service is `app-native`, `ingress-derived`, or `no-http`.
+- **Acceptance Criteria:**
+  - A written observability contract defines the required baseline for every service: canonical labels/identity, logs, uptime, restart visibility, deploy-window visibility, and one declared HTTP metrics mode.
+  - The contract supports at least three modes:
+    - `app-native` for services that expose their own HTTP metrics,
+    - `ingress-derived` for routed HTTP services that rely on edge metrics,
+    - `no-http` for background/support services where latency/error rate is not a primary signal.
+  - The chosen mode is declared in Git for each service and becomes part of service scaffolding/registration.
+  - Portal APIs and diagnostics can report which observability mode a service is using.
+- **Likely Work Areas:**
+  - Add an ADR or contract doc for service observability modes.
+  - Extend service catalog or scaffold metadata to record the selected mode.
+  - Align portal diagnostics and UI wording with the declared mode.
+- **Progress Notes (2026-03-11):**
+  - Added [service-observability.md](/home/wlodzimierrr/homelab/docs/contracts/service-observability.md) defining the universal baseline plus `app-native`, `ingress-derived`, and `no-http` modes.
+  - Added `observability.mode` declarations to [services.yaml](/home/wlodzimierrr/homelab/workloads/services.yaml) for `homelab-api` and `homelab-web`.
+  - Extended scaffold and CI guardrails so new services must declare an observability mode.
+  - Added portal-side persistence and diagnostics plumbing so Git-backed project metadata can report the declared observability mode after deploy.
+  - Verified the contract path with:
+    - `ruff check app tests`
+    - `pytest tests/test_gitops_project_sync.py tests/test_service_identity_validation.py -q`
+    - `./scripts/check-service-identity-contract.sh`
+    - `./scripts/smoke-test-scaffold-generator.sh`
+    - `python scripts/generate_openapi.py`
+    - `python -m compileall app tests scripts`
+    - `npm run build`
+- **Risk:** Medium
+
+### P1.20 Establish a universal ingress-derived HTTP metrics baseline
+- **Status:** TODO
+- **Problem:** The current fallback strategy assumes ingress metrics exist, but the live cluster does not currently expose usable `traefik_service_*` request series, so any service without app-native HTTP metrics falls back to `No data`.
+- **Evidence:** On 2026-03-11, live portal API checks showed `GET /services/homelab-web/metrics/summary?range=24h` returning `uptimePct = 100`, `restartCount = 0`, but `p95LatencyMs = null` and `errorRatePct = null`. A live Prometheus inspection via port-forward returned no `traefik_service_requests_total` or `traefik_service_request_duration_seconds_bucket` series at all, even after generating real traffic to `portal.dev.homelab.local`. That means the current fallback source is absent cluster-wide rather than merely mis-scoped for one service.
+- **Acceptance Criteria:**
+  - The ingress layer exports request-count and request-duration metrics into Prometheus for every routed HTTP service.
+  - The exported labels can be mapped deterministically to canonical portal service identity (`serviceId`, `namespace`, `appLabel`, optionally `argoAppName`).
+  - A routed service with no app-native metrics still shows live latency and error-rate data through the portal.
+  - At least one newly scaffolded HTTP service can rely only on the ingress-derived mode and still surface useful portal metrics.
+- **Likely Work Areas:**
+  - Enable and scrape ingress-controller request metrics.
+  - Normalize edge metric labels for portal identity joins.
+  - Update fallback PromQL and dashboards to match the real exported metric families and labels.
+  - Add a dated validation drill proving the fallback path works for a non-instrumented HTTP service.
+- **Risk:** High
+
+### P1.21 Enforce per-service metrics mode in CI and runtime diagnostics
+- **Status:** TODO
+- **Problem:** Once multiple observability modes exist, the platform needs hard validation so new services cannot silently land in an ambiguous state where the portal says `No data` but the root cause is undeclared or misconfigured telemetry.
+- **Evidence:** On 2026-03-11, `homelab-web` looked healthy in the portal but lacked latency/error data because there was no declared observability mode and no live ingress metrics source. The current identity checks in `workloads/scripts/check-service-identity-contract.sh` and `/service-registry/diagnostics` do not yet validate telemetry mode or explain whether missing metrics are expected, unsupported, or misconfigured.
+- **Acceptance Criteria:**
+  - CI fails when a service declares `app-native` but lacks the required scrape path/ServiceMonitor, or declares `ingress-derived` but lacks ingress/route metadata.
+  - Runtime diagnostics distinguish:
+    - expected unsupported metrics,
+    - no retained data,
+    - misconfigured or missing telemetry source.
+  - Scaffolded services must choose an observability mode explicitly.
+  - Portal operator diagnostics surface actionable mismatch reasons instead of generic `No data`.
+- **Likely Work Areas:**
+  - Extend GitOps/service catalog validation scripts.
+  - Add backend diagnostics for observability mode and telemetry-source health.
+  - Update service-details UI to explain why a metric card is empty.
+- **Risk:** Medium
+
+### P1.22 Backfill existing services onto the observability contract and capture proof
+- **Status:** TODO
+- **Problem:** Even with a universal contract, the current services still need to be classified and proven against it, otherwise future services will inherit a model that has never been exercised across mixed service types.
+- **Evidence:** `homelab-api` already behaves like an `app-native` service, `homelab-web` behaves like an `ingress-derived` candidate, and `oauth2-proxy` behaves like a support/no-http service. That makes the current repo a good mixed proof set, but no ticket currently captures the migration and evidence work explicitly.
+- **Acceptance Criteria:**
+  - `homelab-api`, `homelab-web`, and `oauth2-proxy` are each mapped to an explicit observability mode in Git.
+  - Live portal diagnostics and service pages show expected behavior for all three modes.
+  - At least one dated evidence note records successful live checks for each mode.
+  - The resulting pattern is documented as the standard path for future services added in Phase 6 and later.
+- **Likely Work Areas:**
+  - Update existing service metadata.
+  - Add one dated live validation pass per service/mode.
+  - Refresh runbooks and scaffolding docs to use the backfilled services as reference examples.
+- **Risk:** Medium
+
 ## Suggested execution order
 
 1. P0.1 GitOps repo access
@@ -648,10 +728,13 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 5. P1.2 portal UI rebaseline
 6. P1.3 end-to-end validation rerun
 7. P1.4 metrics coverage
-8. P1.5 timeline window contract
-9. P1.14 Grafana trends and full logs deep-link cleanup
-10. P1.15 public portal/API host evaluation for external automation
-11. P1.16 single-cluster dual-env isolation plan
-12. P1.17 env-scoped observability and isolation guardrails
-13. P1.18 guarded prod re-enablement in single-cluster mode
-14. P2.2 intermittent Postgres reachability during scheduled syncs
+8. P1.19 universal service observability contract
+9. P1.20 ingress-derived HTTP metrics baseline
+10. P1.21 per-service metrics mode enforcement and diagnostics
+11. P1.22 backfill current services onto the observability contract
+12. P1.5 timeline window contract
+13. P1.15 public portal/API host evaluation for external automation
+14. P1.16 single-cluster dual-env isolation plan
+15. P1.17 env-scoped observability and isolation guardrails
+16. P1.18 guarded prod re-enablement in single-cluster mode
+17. P2.2 intermittent Postgres reachability during scheduled syncs
