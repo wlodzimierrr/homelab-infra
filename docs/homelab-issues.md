@@ -671,25 +671,31 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 - **Risk:** Medium
 
 ### P1.20 Establish a universal ingress-derived HTTP metrics baseline
-- **Status:** TODO
-- **Problem:** The current fallback strategy assumes ingress metrics exist, but the live cluster does not currently expose usable `traefik_service_*` request series, so any service without app-native HTTP metrics falls back to `No data`.
-- **Evidence:** On 2026-03-11, live portal API checks showed `GET /services/homelab-web/metrics/summary?range=24h` returning `uptimePct = 100`, `restartCount = 0`, but `p95LatencyMs = null` and `errorRatePct = null`. A live Prometheus inspection via port-forward returned no `traefik_service_requests_total` or `traefik_service_request_duration_seconds_bucket` series at all, even after generating real traffic to `portal.dev.homelab.local`. That means the current fallback source is absent cluster-wide rather than merely mis-scoped for one service.
+- **Status:** DONE (2026-03-11)
+- **Problem:** The platform needed a universal HTTP metrics baseline for routed services that do not expose app-native Prometheus metrics.
+- **Evidence:** On 2026-03-11, direct inspection of the live Traefik metrics endpoint on `:9100` confirmed `traefik_service_requests_total` and `traefik_service_request_duration_seconds_bucket` were being exported with service labels like `homelab-web-homelab-web-80@kubernetes` and `homelab-api-homelab-api-80@kubernetes`. Prometheus is configured to scrape `PodMonitor`s labeled `release=kube-prometheus-stack`, and after validating the Traefik scrape path and generating live traffic to `portal.dev.homelab.local`, the portal returned ingress-derived fallback data for `homelab-web`: `GET /services/homelab-web/metrics/summary?range=24h` returned `uptimePct = 100`, `p95LatencyMs = 95`, `errorRatePct = 0`, `restartCount = 0`, and `GET /services/homelab-web/metrics/trends?range=24h` reported `querySource = "traefik_fallback"` for both latency and error-rate series.
 - **Acceptance Criteria:**
   - The ingress layer exports request-count and request-duration metrics into Prometheus for every routed HTTP service.
   - The exported labels can be mapped deterministically to canonical portal service identity (`serviceId`, `namespace`, `appLabel`, optionally `argoAppName`).
   - A routed service with no app-native metrics still shows live latency and error-rate data through the portal.
   - At least one newly scaffolded HTTP service can rely only on the ingress-derived mode and still surface useful portal metrics.
 - **Likely Work Areas:**
-  - Enable and scrape ingress-controller request metrics.
-  - Normalize edge metric labels for portal identity joins.
-  - Update fallback PromQL and dashboards to match the real exported metric families and labels.
-  - Add a dated validation drill proving the fallback path works for a non-instrumented HTTP service.
+  - Preserve the Traefik scrape path and label mapping as a platform baseline for future routed services.
+  - Keep portal fallback PromQL aligned with the real Traefik `service` label shape.
+  - Use `homelab-web` as the reference proof case for `ingress-derived` services until a newly scaffolded routed service is added.
 - **Risk:** High
 
 ### P1.21 Enforce per-service metrics mode in CI and runtime diagnostics
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-11)
 - **Problem:** Once multiple observability modes exist, the platform needs hard validation so new services cannot silently land in an ambiguous state where the portal says `No data` but the root cause is undeclared or misconfigured telemetry.
-- **Evidence:** On 2026-03-11, `homelab-web` looked healthy in the portal but lacked latency/error data because there was no declared observability mode and no live ingress metrics source. The current identity checks in `workloads/scripts/check-service-identity-contract.sh` and `/service-registry/diagnostics` do not yet validate telemetry mode or explain whether missing metrics are expected, unsupported, or misconfigured.
+- **Evidence:** On 2026-03-11, the observability-mode enforcement path was implemented locally across both repos. In `workloads`, `scripts/check-service-identity-contract.sh` now fails `app-native` services that lack a `Service` or `ServiceMonitor` and fails `ingress-derived` services that lack canonical Traefik ingress manifests, while `scripts/scaffold-service.py` and `scripts/smoke-test-scaffold-generator.sh` were updated so newly scaffolded `python-fastapi` services emit a base `servicemonitor.yaml` and still pass the stricter contract checks. In `apps/portal`, `backend/app/service_observability.py`, `backend/app/main.py`, and `backend/app/observability_config.py` now emit mode-aware diagnostics for metrics summary/trends and health timeline fallback, and the service details UI now prefers those actionable observability messages over a generic `No data` banner. Verified locally with:
+  - `./.venv/bin/ruff check app tests`
+  - `./.venv/bin/pytest tests/test_service_observability.py tests/test_gitops_project_sync.py tests/test_service_identity_validation.py -q`
+  - `./.venv/bin/python scripts/generate_openapi.py`
+  - `./.venv/bin/python -m compileall app tests scripts`
+  - `./scripts/check-service-identity-contract.sh`
+  - `./scripts/smoke-test-scaffold-generator.sh`
+  - `npm run build`
 - **Acceptance Criteria:**
   - CI fails when a service declares `app-native` but lacks the required scrape path/ServiceMonitor, or declares `ingress-derived` but lacks ingress/route metadata.
   - Runtime diagnostics distinguish:
@@ -729,12 +735,11 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 6. P1.3 end-to-end validation rerun
 7. P1.4 metrics coverage
 8. P1.19 universal service observability contract
-9. P1.20 ingress-derived HTTP metrics baseline
-10. P1.21 per-service metrics mode enforcement and diagnostics
-11. P1.22 backfill current services onto the observability contract
-12. P1.5 timeline window contract
-13. P1.15 public portal/API host evaluation for external automation
-14. P1.16 single-cluster dual-env isolation plan
-15. P1.17 env-scoped observability and isolation guardrails
-16. P1.18 guarded prod re-enablement in single-cluster mode
-17. P2.2 intermittent Postgres reachability during scheduled syncs
+9. P1.21 per-service metrics mode enforcement and diagnostics
+10. P1.22 backfill current services onto the observability contract
+11. P1.5 timeline window contract
+12. P1.15 public portal/API host evaluation for external automation
+13. P1.16 single-cluster dual-env isolation plan
+14. P1.17 env-scoped observability and isolation guardrails
+15. P1.18 guarded prod re-enablement in single-cluster mode
+16. P2.2 intermittent Postgres reachability during scheduled syncs
