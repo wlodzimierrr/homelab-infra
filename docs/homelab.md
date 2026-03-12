@@ -2443,7 +2443,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   4. If Sealed Secrets: call sealed-secret controller API to seal value.
   5. Creates PR with commit "Secret: {service} {env} {key} updated".
   6. Returns PR URL (user reviews PR in GitHub; actual secret value not visible in portal).
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-12)
 - **Acceptance Criteria:**
   - Secret value never logged or stored in unencrypted form.
   - PR shows encrypted/sealed value only (never plaintext).
@@ -2454,6 +2454,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** L
 - **Risk:** High
 - **Notes:** This is high-risk: leaking a secret value is catastrophic. Require explicit token/MFA for secret edits. Consider requiring portal admin approval before PR creation.
+- **Implementation Note:** Implemented locally on 2026-03-12 as `POST /services/{service_id}/config/set-secret` using the current SOPS runtime path only. The backend now reads the allow-listed encrypted manifest from `homelab-workloads`, decrypts it with the mounted age key, updates only the requested allow-listed key, re-encrypts the file with `sops`, opens a PR, and returns PR metadata without exposing plaintext. A new operator bootstrap script `workloads/scripts/bootstrap-runtime-sops-age-key.sh` provisions the runtime age key Secret `homelab-api-sops-age` for the API pod. The remaining gap is one live end-to-end drill proving a real secret edit PR is created and applied successfully from the deployed portal path.
 
 #### T6.3.3 Implement pod restart / rollout trigger (annotation checksum strategy)
 - **Description:** Define and implement restart strategy for ConfigMap/Secret changes. Recommended: add checksum annotation to Deployment/StatefulSet pod template spec when ConfigMap/Secret is patched. Argo CD applies annotation change → Kubernetes restarts pods. Document in ops runbook.

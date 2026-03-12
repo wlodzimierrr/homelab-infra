@@ -117,6 +117,15 @@ cd ../../workloads
 kubectl -n homelab-api get secret homelab-api-git-github
 ```
 
+If the workstation age key was rotated in the same quarter, re-apply the runtime age key used by the portal secret-edit endpoint:
+
+```bash
+cd workloads
+./scripts/bootstrap-runtime-sops-age-key.sh dev
+kubectl -n homelab-api rollout restart deploy/homelab-api
+kubectl -n homelab-api rollout status deploy/homelab-api --timeout=300s
+```
+
 ## 6. Rotate GHCR pull secrets
 
 Issue new read-only package token and update both namespaces:

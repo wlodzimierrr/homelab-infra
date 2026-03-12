@@ -61,6 +61,21 @@ cd workloads
 
 Each secret overlay is wired through a `*-secret-generator.yaml` KSOPS generator. Do not add `*.enc.yaml` files directly to `resources:`.
 
+## 6a. Bootstrap runtime age key for portal secret edits
+
+`POST /services/{service_id}/config/set-secret` decrypts and re-encrypts SOPS manifests inside the `homelab-api` runtime. That path needs the age private key mounted into the backend pod, but the key itself must not be committed to Git.
+
+Bootstrap the runtime key from the operator workstation:
+
+```bash
+cd workloads
+./scripts/bootstrap-runtime-sops-age-key.sh dev
+kubectl -n homelab-api rollout restart deploy/homelab-api
+kubectl -n homelab-api rollout status deploy/homelab-api --timeout=300s
+```
+
+This creates the namespace Secret `homelab-api-sops-age` and mounts it at `/var/run/secrets/sops-age/keys.txt` via `SOPS_AGE_KEY_FILE`. Treat this as runtime-only operator state and re-apply it whenever the workstation age key rotates.
+
 ## 7. Validate guardrails and local render
 
 ```bash
@@ -98,3 +113,4 @@ Capture and store:
 4. Argo/Kubernetes output confirming `homelab-api` and `oauth2-proxy` start with decrypted secret values from Git-managed encrypted manifests.
 5. Argo/Kubernetes output confirming the `homelab-api` Deployment reads `PORTAL_GITHUB_ACTIONS_TOKEN` from `homelab-api-github-actions`.
 6. Dry-run output from `apps/portal/backend/scripts/verify_git_github_token.py` confirming `GIT_GITHUB_TOKEN` can read `wlodzimierrr/homelab-workloads`.
+7. Runtime bootstrap output confirming `homelab-api-sops-age` exists before using the portal secret-edit endpoint.
