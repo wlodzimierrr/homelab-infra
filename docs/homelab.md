@@ -1006,7 +1006,7 @@ and Grafana provisioning are handled in E4.1 and E4.2.
 
 #### T4.3.7 Deployment observability overlay on deployment history
 - **Description:** Enrich deployment history rows with post-deploy metric snapshots (error-rate delta, latency delta, availability impact) to speed regression detection.
-- **Status:** TODO
+- **Status:** DONE (2026-03-12)
 - **Acceptance Criteria:**
   - Deployment history rows include before/after indicators for at least error rate and latency.
   - Rows with missing comparison windows display explicit unavailable state.
@@ -1215,7 +1215,7 @@ Loki, and registry metadata.
 
 #### T4.4.5 Frontend: wire service health timeline to live timeline endpoint
 - **Description:** Replace timeline mock/placeholder logic with the live backend timeline endpoint and add step/range selectors.
-- **Status:** TODO
+- **Status:** DONE (2026-03-12)
 - **Acceptance Criteria:**
   - `/services/:serviceId` timeline renders live segments for default `24h`.
   - Range selector supports `24h` and `7d`; step auto-adjusts appropriately.
@@ -2315,7 +2315,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   4. Requires `deploy_reason` text and captures changelog context (`compare_url`, `previous_tag`, `new_tag`) in request metadata.
   5. Commits and opens PR with title "Deploy {service}: {new_tag} to dev".
   6. Creates a deployment record (`action_type=deploy`, `status=pending`) and returns PR URL + deployment ID.
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-12)
 - **Acceptance Criteria:**
   - Endpoint requires auth (logged-in user).
   - PR diff shows only image tag change in dev kustomize patch.
@@ -2327,6 +2327,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** High
 - **Notes:** Use semantic versioning tag or git-sha convention. Handle case where latest tag already in dev (return 204 or info message).
+- **Implementation Note:** Implemented in `apps/portal` and fully live-proven on 2026-03-12. `POST /services/homelab-web/deploy-to-dev` authenticates, enforces a minimum deploy reason, resolves the latest successful `portal-images.yml` build, and handles both `noop` and non-`noop` paths correctly. Live proof created workloads PR `#74`, deployment record `20022b2a-99ae-4035-863b-cb2e26f1b28e`, and captured `previousTag = sha-91260e065c6826040d2208ee73a752b600aeae7b`, `newTag = sha-6904464d0c1890629101d845926534e02110b89c`, the expected compare link, and final reconciled `status = live`. The earlier superseded auto-bump PR `#73` was closed without merge and reconciled to `failed`, which also confirmed the lock-aware overlap protection path.
 - **Change Note:** Extended to require deploy reason/changelog context and to create deployment records as first-class objects.
 
 #### T6.2.2 Portal API: "Promote dev → prod" endpoint
@@ -2337,7 +2338,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   4. Requires `deploy_reason` text and captures changelog context (`compare_url`, `previous_tag`, `new_tag`) in request metadata.
   5. Commits and opens PR with title "Promote {service}: {tag} to prod".
   6. Creates a deployment record (`action_type=promote`, `status=pending`) and returns PR URL + deployment ID.
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-12)
 - **Acceptance Criteria:**
   - Promotion PR contains only prod patch change.
   - Promotion copies the exact tag from dev (no manual override yet).
@@ -2349,6 +2350,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** High
 - **Notes:** Later enhancement: gated promotion (approvals, policy checks). For MVP: user merges PR in GitHub.
+- **Implementation Note:** Implemented in `apps/portal` and fully live-proven at the API/PR/record level on 2026-03-12 as `POST /services/{service_id}/promote-to-prod`. The endpoint reads the exact dev tag for the selected service, verifies the corresponding published image tag exists, updates only the prod overlay image patch file(s), opens a service-specific PR, and writes a pending `action=promote` deployment record. Live proof created workloads PR `#71` for `homelab-web`, with deployment record `580e3fb7-2830-449c-84f7-688258019862`, `previousTag = sha-04aea0869d105ee2332bf7e2ceb668ac4251c675`, `newTag = sha-6a30b92a070e7bf11e847dd56052e92171a09a22`, the expected compare link, and a merged PR diff affecting only `apps/homelab-web/envs/prod/patch-deployment.yaml`. Under the current single-cluster prod safety model, the final record reconciles to `failed` with `No matching service registry row exists for this deployment target.` because no live prod workload target exists; that operator-reviewed exception is accepted for this task because the promote path, PR generation, and deployment-record traceability are the intended scope.
 - **Change Note:** Extended to persist promotion deployment records and deploy reason/changelog context.
 
 #### T6.2.3 Portal API: "Rollback to previous tag" endpoint
@@ -2359,7 +2361,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   4. Requires `deploy_reason` text and captures changelog context (`compare_url`, `previous_tag`, `new_tag`) in request metadata.
   5. Creates PR bumping image tag back to target.
   6. Creates a deployment record (`action_type=rollback`, `status=pending`) and returns PR URL + deployment ID.
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-12)
 - **Acceptance Criteria:**
   - At least 5 previous tags available for selection.
   - Rollback PR contains only tag change.
@@ -2370,6 +2372,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** Medium
 - **Notes:** Integrate with container registry API (GHCR, Harbor) to list tags with dates. Provide UI confirmation before generating PR.
+- **Implementation Note:** The original portal-pair rollback path is already live via `POST /rollbacks`, with dated API proof captured on 2026-03-11. In addition, `apps/portal` now has a generic per-service rollback implementation ready for rollout: `GET /services/{service_id}/rollback-candidates` lists the current tag plus up to 5 prior candidate tags from GitHub Packages metadata, `POST /services/{service_id}/rollback` creates a service-scoped GitOps PR plus pending `action=rollback` deployment record, `apps/portal/backend/app/deployment_reconciler.py` recognizes the new manual rollback PR pattern, and `apps/portal/frontend/src/pages/service-details-page.tsx` now uses a per-service rollback form with environment selection and candidate-tag picker instead of raw tag text inputs. The remaining gap is live proof for the new generic per-service path after the updated backend/frontend are deployed.
 - **Change Note:** Extended to make rollback a first-class deployment record with required operator reason/changelog context.
 
 #### T6.2.4 Portal UI: Deploy & promote controls
@@ -2378,7 +2381,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   - "Promote to prod" button (if user in prod-approver role) → calls T6.2.2 → shows PR link.
   - "Rollback" button → modal to select previous tag → calls T6.2.3.
   - Each button shows: current deployed tag, latest available tag, PR status (open/merged).
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-12)
 - **Acceptance Criteria:**
   - Buttons disabled if deploy lock exists for the selected `serviceId+env` or if a deployment is in `pending/deploying`.
   - PR links clickable and open in new tab.
@@ -2389,11 +2392,12 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** Low
 - **Notes:** Show PR state (open, merged, closed) with color badges; auto-refresh every 30s to detect merge.
+- **Implementation Note:** The service detail page now includes deployment-lock visibility, a first-class rollback form with environment selection plus previous-tag candidates, clickable deployment-history navigation, and status-aware recent deployment rows. That means the lock-awareness and rollback portions of this task are already present in `apps/portal/frontend/src/pages/service-details-page.tsx`. The remaining gap is the forward-action UI: there are still no first-class `Deploy latest to dev` or `Promote to prod` controls on the service page.
 - **Change Note:** Expanded from simple button UX to deployment-status-aware controls with lock awareness and timeline context.
 
 #### T6.2.5 Release traceability: link deployments to commits and images
 - **Description:** Enhance release traceability by linking deployment records to commit/image/PR metadata and Argo rollout outcomes. Add metadata endpoint `GET /api/services/{service_id}/deployment-info` that returns: `{deployment_id, deployed_image, previous_image, image_digest, git_commit, deployed_timestamp, pr_link, compare_url, deploy_reason, result, result_reason}`.
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-12)
 - **Acceptance Criteria:**
   - Argo Application has custom annotations: `image-tag`, `commit-sha`, `deployed-at`.
   - Portal displays these in service detail → "Deploy Info" card.
@@ -2404,6 +2408,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** Medium
 - **Notes:** Metadata initially populated via PR merge event (GitHub Actions comment on Argo Application manifest); later automate via Argo Notification or custom controller.
+- **Implementation Note:** A substantial part of release traceability is already live through deployment records and the existing release dashboard. `apps/portal/backend/app/main.py` and `apps/portal/backend/app/deployment_records.py` already persist and return `commitSha`, `imageRef`, `previousImageRef`, `gitPrUrl`, `gitPrNumber`, `mergeSha`, `compareUrl`, and `deployReason`, and the frontend already renders commit/image/Argo drift state on the dashboard plus compare/deploy-reason context on deployment history pages. The remaining gap is the explicit per-service `GET /services/{service_id}/deployment-info` endpoint and a dedicated "Deploy Info" card on the service detail page, along with any Argo-side custom annotations if that path is still desired.
 - **Change Note:** Scope expanded from Argo-only annotation view to canonical deployment-record traceability.
 
 ---
