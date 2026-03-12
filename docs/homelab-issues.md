@@ -716,26 +716,30 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 - **Risk:** Medium
 
 ### P1.22 Backfill existing services onto the observability contract and capture proof
-- **Status:** IN PROGRESS (2026-03-11)
-- **Problem:** Even with a universal contract, the current services still need to be classified and proven against it, otherwise future services will inherit a model that has never been exercised across mixed service types.
-- **Evidence:** `homelab-api` already behaves like an `app-native` service, `homelab-web` behaves like an `ingress-derived` candidate, and `oauth2-proxy` behaves like a support/no-http service. That makes the current repo a good mixed proof set, but no ticket currently captures the migration and evidence work explicitly.
+- **Status:** DONE (2026-03-12)
+- **Problem:** The current services needed to be explicitly classified and then proven live against the contract, otherwise future services would inherit a model that had never been exercised across mixed service types.
+- **Evidence:** `homelab-api` behaves as an `app-native` service, `homelab-web` behaves as an `ingress-derived` service, and `oauth2-proxy` now behaves as a support `no-http` service. The repo now captures that mixed proof set explicitly instead of relying on implied behavior.
 - **Acceptance Criteria:**
   - `homelab-api`, `homelab-web`, and `oauth2-proxy` are each mapped to an explicit observability mode in Git.
   - Live portal diagnostics and service pages show expected behavior for all three modes.
   - At least one dated evidence note records successful live checks for each mode.
   - The resulting pattern is documented as the standard path for future services added in Phase 6 and later.
 - **Likely Work Areas:**
-  - Update existing service metadata.
-  - Add one dated live validation pass per service/mode.
-  - Refresh runbooks and scaffolding docs to use the backfilled services as reference examples.
-- **Progress So Far (2026-03-11):**
+  - Keep the three-service proof set current as new services are added.
+  - Reuse `homelab-api`, `homelab-web`, and `oauth2-proxy` as the reference examples for future scaffolds and runbooks.
+- **Evidence (Live):**
   - `services.yaml` now declares:
     - `homelab-api` as `app-native`
     - `homelab-web` as `ingress-derived`
     - `oauth2-proxy` as `no-http`
   - GitOps project sync now synthesizes service-catalog-backed registry rows for support services declared with `envs[*].workload_ref`.
   - Identity diagnostics now treat component-level workload refs such as `apps/homelab-web/envs/dev/oauth2-proxy.yaml` as valid inherited Argo/Git paths instead of false drift.
-  - Live proof is still needed before this ticket can be closed.
+  - On 2026-03-12, a direct live `sync_project_registry_from_gitops(..., env_name="dev")` run inside the deployed `homelab-api` pod inserted the missing `oauth2-proxy` `project_registry` row with `observability_mode = "no-http"`.
+  - After that sync, live `GET /service-registry/diagnostics?env=dev` returned:
+    - `homelab-api -> observabilityMode = "app-native"`
+    - `homelab-web -> observabilityMode = "ingress-derived"`
+    - `oauth2-proxy -> observabilityMode = "no-http"`
+  - Live `GET /services/oauth2-proxy/metrics/summary?range=24h` now returns `observabilityDiagnostics = { mode: "no-http", authority: "none", status: "unsupported", reason: "no_http_mode_declared" }`, which proves the portal now distinguishes intentionally unsupported HTTP metrics from missing or broken telemetry.
 - **Risk:** Medium
 
 ## Suggested execution order
@@ -749,10 +753,9 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 7. P1.4 metrics coverage
 8. P1.19 universal service observability contract
 9. P1.21 per-service metrics mode enforcement and diagnostics
-10. P1.22 backfill current services onto the observability contract
-11. P1.5 timeline window contract
-12. P1.15 public portal/API host evaluation for external automation
-13. P1.16 single-cluster dual-env isolation plan
-14. P1.17 env-scoped observability and isolation guardrails
-15. P1.18 guarded prod re-enablement in single-cluster mode
-16. P2.2 intermittent Postgres reachability during scheduled syncs
+10. P1.5 timeline window contract
+11. P1.15 public portal/API host evaluation for external automation
+12. P1.16 single-cluster dual-env isolation plan
+13. P1.17 env-scoped observability and isolation guardrails
+14. P1.18 guarded prod re-enablement in single-cluster mode
+15. P2.2 intermittent Postgres reachability during scheduled syncs
