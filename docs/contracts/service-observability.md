@@ -88,6 +88,26 @@ Allowed values:
 
 This declaration is part of service scaffolding and should be added for every new service at creation time.
 
+Support services that are deployed inside another service's overlay can also be declared in
+`services.yaml`. In that case, the env entry should point at the supporting workload manifest
+instead of a top-level app root.
+
+Example:
+
+```yaml
+services:
+  - service_id: oauth2-proxy
+    name: OAuth2 Proxy
+    observability:
+      mode: no-http
+    envs:
+      - name: dev
+        namespace: homelab-web
+        app_label: oauth2-proxy
+        argo_app: homelab-web-dev
+        workload_ref: apps/homelab-web/envs/dev/oauth2-proxy.yaml
+```
+
 ## Runtime expectations
 
 The portal should surface the declared mode in:
@@ -106,5 +126,4 @@ Diagnostics should fail or warn when:
 
 - `homelab-api`: `app-native`
 - `homelab-web`: `ingress-derived`
-
-Future support or background services can use `no-http` when HTTP latency and error rate are not meaningful signals.
+- `oauth2-proxy`: `no-http`

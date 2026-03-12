@@ -686,9 +686,9 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 - **Risk:** High
 
 ### P1.21 Enforce per-service metrics mode in CI and runtime diagnostics
-- **Status:** IN PROGRESS (2026-03-11)
+- **Status:** DONE (2026-03-11)
 - **Problem:** Once multiple observability modes exist, the platform needs hard validation so new services cannot silently land in an ambiguous state where the portal says `No data` but the root cause is undeclared or misconfigured telemetry.
-- **Evidence:** On 2026-03-11, the observability-mode enforcement path was implemented locally across both repos. In `workloads`, `scripts/check-service-identity-contract.sh` now fails `app-native` services that lack a `Service` or `ServiceMonitor` and fails `ingress-derived` services that lack canonical Traefik ingress manifests, while `scripts/scaffold-service.py` and `scripts/smoke-test-scaffold-generator.sh` were updated so newly scaffolded `python-fastapi` services emit a base `servicemonitor.yaml` and still pass the stricter contract checks. In `apps/portal`, `backend/app/service_observability.py`, `backend/app/main.py`, and `backend/app/observability_config.py` now emit mode-aware diagnostics for metrics summary/trends and health timeline fallback, and the service details UI now prefers those actionable observability messages over a generic `No data` banner. Verified locally with:
+- **Evidence:** On 2026-03-11, the observability-mode enforcement path was implemented across both repos and then validated live. In `workloads`, `scripts/check-service-identity-contract.sh` now fails `app-native` services that lack a `Service` or `ServiceMonitor` and fails `ingress-derived` services that lack canonical Traefik ingress manifests, while `scripts/scaffold-service.py` and `scripts/smoke-test-scaffold-generator.sh` were updated so newly scaffolded `python-fastapi` services emit a base `servicemonitor.yaml` and still pass the stricter contract checks. In `apps/portal`, `backend/app/service_observability.py`, `backend/app/main.py`, and `backend/app/observability_config.py` now emit mode-aware diagnostics for metrics summary/trends and health timeline fallback, and the service details UI now prefers those actionable observability messages over a generic `No data` banner. Verified locally with:
   - `./.venv/bin/ruff check app tests`
   - `./.venv/bin/pytest tests/test_service_observability.py tests/test_gitops_project_sync.py tests/test_service_identity_validation.py -q`
   - `./.venv/bin/python scripts/generate_openapi.py`
@@ -696,6 +696,12 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
   - `./scripts/check-service-identity-contract.sh`
   - `./scripts/smoke-test-scaffold-generator.sh`
   - `npm run build`
+  And verified live at `http://api.dev.homelab.local` after forcing `gitops_apps` and `cluster_services` sync:
+  - `GET /service-registry/diagnostics?env=dev` reported `observabilityMode = "app-native"` for `homelab-api` and `observabilityMode = "ingress-derived"` for `homelab-web`
+  - `GET /services/homelab-api/metrics/summary?range=24h` returned `observabilityDiagnostics = { mode: "app-native", authority: "app", status: "ok" }`
+  - `GET /services/homelab-web/metrics/summary?range=24h` returned `observabilityDiagnostics = { mode: "ingress-derived", authority: "ingress", status: "ok" }`
+  - `GET /services/homelab-api/metrics/trends?range=24h` resolved `querySource = "app_metrics"`
+  - `GET /services/homelab-web/metrics/trends?range=24h` resolved `querySource = "traefik_fallback"`
 - **Acceptance Criteria:**
   - CI fails when a service declares `app-native` but lacks the required scrape path/ServiceMonitor, or declares `ingress-derived` but lacks ingress/route metadata.
   - Runtime diagnostics distinguish:
@@ -705,13 +711,12 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
   - Scaffolded services must choose an observability mode explicitly.
   - Portal operator diagnostics surface actionable mismatch reasons instead of generic `No data`.
 - **Likely Work Areas:**
-  - Extend GitOps/service catalog validation scripts.
-  - Add backend diagnostics for observability mode and telemetry-source health.
-  - Update service-details UI to explain why a metric card is empty.
+  - Keep the live sync/diagnostics pass repeatable as more services are added.
+  - Leave explicit `no-http` backfill evidence to `P1.22`.
 - **Risk:** Medium
 
 ### P1.22 Backfill existing services onto the observability contract and capture proof
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-11)
 - **Problem:** Even with a universal contract, the current services still need to be classified and proven against it, otherwise future services will inherit a model that has never been exercised across mixed service types.
 - **Evidence:** `homelab-api` already behaves like an `app-native` service, `homelab-web` behaves like an `ingress-derived` candidate, and `oauth2-proxy` behaves like a support/no-http service. That makes the current repo a good mixed proof set, but no ticket currently captures the migration and evidence work explicitly.
 - **Acceptance Criteria:**
@@ -723,6 +728,14 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
   - Update existing service metadata.
   - Add one dated live validation pass per service/mode.
   - Refresh runbooks and scaffolding docs to use the backfilled services as reference examples.
+- **Progress So Far (2026-03-11):**
+  - `services.yaml` now declares:
+    - `homelab-api` as `app-native`
+    - `homelab-web` as `ingress-derived`
+    - `oauth2-proxy` as `no-http`
+  - GitOps project sync now synthesizes service-catalog-backed registry rows for support services declared with `envs[*].workload_ref`.
+  - Identity diagnostics now treat component-level workload refs such as `apps/homelab-web/envs/dev/oauth2-proxy.yaml` as valid inherited Argo/Git paths instead of false drift.
+  - Live proof is still needed before this ticket can be closed.
 - **Risk:** Medium
 
 ## Suggested execution order
