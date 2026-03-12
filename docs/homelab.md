@@ -2230,7 +2230,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 
 #### T6.1.1 Write ADR: Portal-to-Git workflow model
 - **Description:** Decide how the portal will create Git changes: Option A (GitHub API PRs directly), Option B (write to "requests" branch and bot opens PR), or Option C (direct commits to feature branches, discouraged). Document trade-offs: latency, security token scope, audit trail, multi-git-provider support.
-- **Status:** TODO
+- **Status:** DONE (2026-03-11)
 - **Acceptance Criteria:**
   - ADR accepts one option with rationale.
   - Implementation plan includes token management and scope limits.
@@ -2239,6 +2239,9 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** S
 - **Risk:** Medium
 - **Notes:** Choose Option A (GitHub API PRs) for solo engineer simplicity and audit trail. Option B adds workflow bot maintenance. Option C loses audit and requires branch cleanup discipline.
+- **Evidence:**
+  - ADR added at `docs/adr/0007-portal-to-git-workflow-model.md` and marked `Accepted`, choosing direct GitHub API pull request creation as the portal write model.
+  - The ADR includes the implementation plan for fine-grained token scope (`Contents`, `Pull requests`, `Metadata`), SOPS-backed secret storage as `GIT_GITHUB_TOKEN`, path allow-listing, idempotent branch/PR creation, and bounded retry plus manual replay guidance for GitHub outage or rate-limit conditions.
 
 #### T6.1.2 Implement backend Git integration module
 - **Description:** Create `app/lib/git_service.py` (backend) with:
@@ -2248,7 +2251,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   - `commit_to_branch(repo, branch, files_dict, message)` → multi-file commit
   - `close_pr(repo, pr_id)` → for cleanup (optional)
   - Error handling for conflicts, rate limits, auth failures.
-- **Status:** TODO
+- **Status:** DONE (2026-03-11)
 - **Acceptance Criteria:**
   - Module has type hints and docstrings.
   - Unit tests mock GitHub API calls for all happy paths + auth failure + conflict scenarios.
@@ -2258,10 +2261,14 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** Medium
 - **Notes:** Use PyGithub or similar for API calls. Guard against rate limits with retries/backoff.
+- **Evidence:**
+  - Added `apps/portal/backend/app/lib/git_service.py` with a GitHub-backed `GitHubGitService`, typed return contracts, dry-run logging, retry/backoff handling for rate limits and `5xx`, and explicit auth/conflict error mapping.
+  - Added `apps/portal/backend/tests/test_git_service.py` covering happy paths for branch creation, file modification, PR open/close, multi-file commits, plus auth failure, conflict handling, rate-limit retry, and dry-run behavior using mocked GitHub API calls.
+  - `python3 -m py_compile` passed for the new module and tests. Local `pytest` execution was not possible in this workspace because `pytest` is not installed.
 
 #### T6.1.3 Configure fine-scoped GitHub token and store securely
 - **Description:** Create a GitHub personal access token (or fine-grained token) scoped to: workloads only, write access to Contents + Pull Requests. Store in `homelab-api` secret (encrypted via SOPS/Sealed Secrets) as `GIT_GITHUB_TOKEN`. Document token rotation quarterly.
-- **Status:** TODO
+- **Status:** IN PROGRESS (2026-03-12)
 - **Acceptance Criteria:**
   - Token has minimum required scopes (no admin, no org/user data access).
   - Secret stored encrypted in workloads repo or homelab-api namespace.
@@ -2271,6 +2278,11 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** S
 - **Risk:** High
 - **Notes:** Use GitHub "fine-grained personal access tokens" (beta at time of writing) for maximum scope isolation if available.
+- **Evidence:**
+  - Added `workloads/scripts/bootstrap-sops-git-github-token.sh` to create a SOPS-encrypted `homelab-api-git-github` Secret manifest with `GIT_GITHUB_TOKEN` and to wire its KSOPS generator into the dev overlay when the operator provides a real token.
+  - Updated `workloads/apps/homelab-api/envs/dev/patch-deployment.yaml` so the API container can consume `GIT_GITHUB_TOKEN` from `homelab-api-git-github` once the secret is created, without breaking current deployments before the token exists.
+  - Added `apps/portal/backend/scripts/verify_git_github_token.py` as a dry-run repo access probe for `wlodzimierrr/homelab-workloads`.
+  - Updated `docs/runbooks/sops-secrets.md`, `docs/runbooks/secret-rotation-quarterly.md`, and `workloads/README.md` with fine-scoped token scope, bootstrap, validation, and rotation steps.
 
 #### T6.1.4 Add Git provider abstraction + GitHub implementation
 - **Description:** Design a `GitProvider` interface (Python ABC or Protocol) so future additions (GitLab, Gitea) stay decoupled. Implement GitHub provider.

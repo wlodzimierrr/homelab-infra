@@ -4,7 +4,9 @@ This runbook covers T3.3.2 for quarterly rotation of:
 
 1. API Postgres credentials (SOPS-managed)
 2. oauth2-proxy credentials/cookie secret
-3. GHCR pull secrets
+3. Portal GitHub Actions dispatch token
+4. Portal Git write token
+5. GHCR pull secrets
 
 Target: no prolonged outage (rollout completion <= 5 minutes per rotated workload).
 
@@ -13,6 +15,8 @@ Target: no prolonged outage (rollout completion <= 5 minutes per rotated workloa
 ```bash
 cd workloads
 ./scripts/check-secrets-guardrails.sh
+./scripts/render-kustomize.sh apps/homelab-api/envs/dev >/dev/null
+./scripts/render-kustomize.sh apps/homelab-web/envs/dev >/dev/null
 kubectl -n homelab-api get deploy homelab-api
 kubectl -n homelab-web get deploy homelab-web oauth2-proxy
 ```
@@ -44,25 +48,76 @@ Validate rollout SLO:
 
 ## 3. Rotate oauth2-proxy credentials
 
-Create new GitHub client secret and cookie secret, then update Kubernetes Secret:
+Create a new GitHub client secret and re-encrypt the Git-managed secret:
 
 ```bash
-kubectl -n homelab-web create secret generic oauth2-proxy-secret \
-  --from-literal=OAUTH2_PROXY_CLIENT_ID='<PORTAL_GH_CLIENT_ID>' \
-  --from-literal=OAUTH2_PROXY_CLIENT_SECRET='<NEW_PORTAL_GH_CLIENT_SECRET>' \
-  --from-literal=OAUTH2_PROXY_COOKIE_SECRET="$(openssl rand -base64 32)" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl -n homelab-web rollout restart deployment/oauth2-proxy
+cd workloads
+./scripts/bootstrap-sops-oauth2-proxy-secret.sh dev
+git add apps/homelab-web/envs/dev/oauth2-proxy-secret.enc.yaml
+git commit -m "chore(secrets): quarterly rotate oauth2-proxy credentials"
+git push origin main
 ```
 
 Validate rollout SLO:
 
 ```bash
-./workloads/scripts/verify-rotation-slo.sh homelab-web oauth2-proxy 300
+./scripts/verify-rotation-slo.sh homelab-web oauth2-proxy 300
 ```
 
-## 4. Rotate GHCR pull secrets
+## 4. Rotate portal GitHub Actions dispatch token
+
+Generate a replacement token with only the scopes needed to dispatch the portal GitHub workflow, re-encrypt it into Git, and let Argo roll out the API Deployment:
+
+```bash
+cd workloads
+./scripts/bootstrap-sops-github-actions-token.sh dev
+git add apps/homelab-api/envs/dev/github-actions-secret.enc.yaml
+git commit -m "chore(secrets): rotate portal GitHub Actions token"
+git push origin main
+```
+
+Validate rollout SLO:
+
+```bash
+./scripts/verify-rotation-slo.sh homelab-api homelab-api 300
+kubectl -n homelab-api get secret homelab-api-github-actions
+```
+
+## 5. Rotate portal Git write token
+
+Create a fine-grained token scoped only to `wlodzimierrr/homelab-workloads` with:
+
+- repository access: single repo
+- permissions:
+  - `Contents`: Read and write
+  - `Pull requests`: Read and write
+  - `Metadata`: Read-only
+
+Re-encrypt it into Git and verify read access before relying on it from the deployed API:
+
+```bash
+cd workloads
+./scripts/bootstrap-sops-git-github-token.sh --prompt dev
+git add \
+  apps/homelab-api/envs/dev/git-github-token-secret.enc.yaml \
+  apps/homelab-api/envs/dev/git-github-token-secret-generator.yaml \
+  apps/homelab-api/envs/dev/kustomization.yaml
+git commit -m "chore(secrets): rotate portal git write token"
+git push origin main
+
+cd ../apps/portal/backend
+GIT_GITHUB_TOKEN="$NEW_GIT_GITHUB_TOKEN" ./.venv/bin/python scripts/verify_git_github_token.py
+```
+
+Validate rollout SLO:
+
+```bash
+cd ../../workloads
+./scripts/verify-rotation-slo.sh homelab-api homelab-api 300
+kubectl -n homelab-api get secret homelab-api-git-github
+```
+
+## 6. Rotate GHCR pull secrets
 
 Issue new read-only package token and update both namespaces:
 
@@ -82,7 +137,7 @@ kubectl -n homelab-web create secret docker-registry ghcr-pull-secret \
 
 Restart workloads that consume the pull secret only if required by image pull failures.
 
-## 5. Post-rotation validation
+## 7. Post-rotation validation
 
 ```bash
 argocd app get homelab-api-dev --grpc-web
@@ -97,11 +152,11 @@ Record:
 2. `verify-rotation-slo.sh` output
 3. Any incident, rollback, or manual intervention
 
-## 6. Rollback
+## 8. Rollback
 
 If rotation fails:
 
 1. Revert SOPS secret commit and push.
-2. Re-apply previous known-good runtime secret for oauth2-proxy/GHCR.
+2. Re-apply previous known-good GHCR secret if pull credentials were part of the change.
 3. Restart affected deployment.
 4. Confirm service restored, then perform root-cause analysis.

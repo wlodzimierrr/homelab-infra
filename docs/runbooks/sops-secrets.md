@@ -1,10 +1,10 @@
 # SOPS Secrets Runbook
 
-This runbook implements T3.3.1 using SOPS + age.
+This runbook implements T3.3.1 using `SOPS + age` for encryption and `KSOPS` for Argo CD/Kustomize decryption.
 
 ## 1. Install tooling
 
-Install `sops` and `age` on your operator workstation.
+Install `sops`, `age`, `ksops`, and `kustomize` on your operator workstation.
 
 ## 2. Create an age keypair
 
@@ -28,56 +28,73 @@ creation_rules:
       - age1REPLACE_WITH_YOUR_PUBLIC_KEY
 ```
 
-## 4. Encrypt secret manifests
+## 4. Publish the age key to Argo CD
 
-Example for API Postgres secret:
+Create/update the repo-server age key secret:
+
+```bash
+kubectl -n argocd create secret generic argocd-sops-age \
+  --from-file=keys.txt="$HOME/.config/sops/age/keys.txt" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+## 5. Refresh Argo CD repo-server support
+
+Apply the Argo CD role so repo-server receives `ksops`, the age key mount, and plugin-aware Kustomize build flags:
+
+```bash
+ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/argocd.yml
+```
+
+## 6. Encrypt secret manifests
+
+Bootstrap the live secret manifests:
 
 ```bash
 cd workloads
 ./scripts/bootstrap-sops-postgres-secret.sh dev
 ./scripts/bootstrap-sops-postgres-secret.sh prod
+./scripts/bootstrap-sops-oauth2-proxy-secret.sh dev
+./scripts/bootstrap-sops-github-actions-token.sh --from-cluster dev
+./scripts/bootstrap-sops-git-github-token.sh --prompt dev
 ```
 
-Repeat per environment and for other app secrets.
+Each secret overlay is wired through a `*-secret-generator.yaml` KSOPS generator. Do not add `*.enc.yaml` files directly to `resources:`.
 
-## 5. Wire encrypted secrets into overlays
-
-Only do this after Argo CD decryption integration is configured.
-
-Current homelab state:
-
-1. Argo CD is not configured with SOPS decryption plugin yet.
-2. Do **not** include `postgres-secret.enc.yaml` in overlay `resources`, or pods will receive literal `ENC[...]` values.
-3. Keep encrypted files in Git for source-of-truth and decrypt/apply at runtime from operator workflow.
-
-## 6. Validate guardrails
+## 7. Validate guardrails and local render
 
 ```bash
 cd workloads
 ./scripts/check-secrets-guardrails.sh
+./scripts/render-kustomize.sh apps/homelab-api/envs/dev >/dev/null
+./scripts/render-kustomize.sh apps/homelab-api/envs/prod >/dev/null
+./scripts/render-kustomize.sh apps/homelab-web/envs/dev >/dev/null
 ```
 
 This fails if plaintext `kind: Secret` manifests are committed without a `sops:` block.
 
-## 7. Validate decryption and apply
+## 8. Validate the live delivery path
 
-Local check:
-
-```bash
-sops --decrypt workloads/apps/homelab-api/envs/dev/postgres-secret.enc.yaml >/dev/null
-```
-
-Cluster check (using local decryption in operator or pipeline step):
+If you have `sync` permission, you can trigger an Argo sync explicitly. Otherwise wait for auto-sync and use read-only checks:
 
 ```bash
-sops --decrypt workloads/apps/homelab-api/envs/dev/postgres-secret.enc.yaml | kubectl apply --dry-run=server -f -
-sops --decrypt workloads/apps/homelab-api/envs/dev/postgres-secret.enc.yaml | kubectl apply -f -
+argocd app get homelab-api-dev --grpc-web
+argocd app get homelab-web-dev --grpc-web
+kubectl -n homelab-api rollout status deploy/homelab-api --timeout=300s
+kubectl -n homelab-web rollout status deploy/oauth2-proxy --timeout=300s
+kubectl -n homelab-api get secret homelab-api-postgres
+kubectl -n homelab-api get secret homelab-api-github-actions
+kubectl -n homelab-api get secret homelab-api-git-github
+kubectl -n homelab-web get secret oauth2-proxy-secret
 ```
 
-## 8. Acceptance evidence for T3.3.1
+## 9. Acceptance evidence for T3.3.1
 
 Capture and store:
 
 1. `git grep -n "^kind: Secret"` output showing only SOPS-managed files.
 2. Guardrail script pass output.
-3. `kubectl` apply/sync output confirming workloads start with decrypted secret values.
+3. Evidence that `argocd-repo-server` has `ksops` support and the age key mount.
+4. Argo/Kubernetes output confirming `homelab-api` and `oauth2-proxy` start with decrypted secret values from Git-managed encrypted manifests.
+5. Argo/Kubernetes output confirming the `homelab-api` Deployment reads `PORTAL_GITHUB_ACTIONS_TOKEN` from `homelab-api-github-actions`.
+6. Dry-run output from `apps/portal/backend/scripts/verify_git_github_token.py` confirming `GIT_GITHUB_TOKEN` can read `wlodzimierrr/homelab-workloads`.
