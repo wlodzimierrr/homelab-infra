@@ -2268,7 +2268,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 
 #### T6.1.3 Configure fine-scoped GitHub token and store securely
 - **Description:** Create a GitHub personal access token (or fine-grained token) scoped to: workloads only, write access to Contents + Pull Requests. Store in `homelab-api` secret (encrypted via SOPS/Sealed Secrets) as `GIT_GITHUB_TOKEN`. Document token rotation quarterly.
-- **Status:** IN PROGRESS (2026-03-12)
+- **Status:** DONE (2026-03-12)
 - **Acceptance Criteria:**
   - Token has minimum required scopes (no admin, no org/user data access).
   - Secret stored encrypted in workloads repo or homelab-api namespace.
@@ -2283,10 +2283,12 @@ The six readiness gates above are green and the Render-like checklist is now ful
   - Updated `workloads/apps/homelab-api/envs/dev/patch-deployment.yaml` so the API container can consume `GIT_GITHUB_TOKEN` from `homelab-api-git-github` once the secret is created, without breaking current deployments before the token exists.
   - Added `apps/portal/backend/scripts/verify_git_github_token.py` as a dry-run repo access probe for `wlodzimierrr/homelab-workloads`.
   - Updated `docs/runbooks/sops-secrets.md`, `docs/runbooks/secret-rotation-quarterly.md`, and `workloads/README.md` with fine-scoped token scope, bootstrap, validation, and rotation steps.
+  - On 2026-03-12, `verify_git_github_token.py` returned `{"ok": true, "repo": "wlodzimierrr/homelab-workloads", ...}` for a fine-scoped `GIT_GITHUB_TOKEN`, proving the token can read the target repo without deployment-side mutation.
+  - On 2026-03-12, Argo reconciled `homelab-api-dev` to workloads revision `91e31ae55fb4e34c56dab63078d505050a3297fd`, and `kubectl -n homelab-api get secret homelab-api-git-github` confirmed the GitOps-managed Secret exists live with status `Synced`.
 
 #### T6.1.4 Add Git provider abstraction + GitHub implementation
 - **Description:** Design a `GitProvider` interface (Python ABC or Protocol) so future additions (GitLab, Gitea) stay decoupled. Implement GitHub provider.
-- **Status:** TODO
+- **Status:** DONE (2026-03-12)
 - **Acceptance Criteria:**
   - `GitProvider` protocol defines required methods.
   - GitHub implementation passes all T6.1.2 tests.
@@ -2295,6 +2297,11 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** Low
 - **Notes:** Defer GitLab/Gitea until a second provider is actually needed.
+- **Evidence:**
+  - `apps/portal/backend/app/lib/git_service.py` now exposes a provider-agnostic `GitProvider` protocol while retaining the older `GitService` name as a compatibility alias for existing imports.
+  - The GitHub implementation is now surfaced as both `GitHubGitProvider` and the compatibility alias `GitHubGitService`, so the existing T6.1.2 GitHub tests continue to exercise the real provider implementation without refactoring downstream call sites yet.
+  - Added `build_default_git_provider()` and `GIT_PROVIDER`-based provider selection, with explicit rejection of unsupported providers while keeping `github` as the default.
+  - Added factory-selection coverage in `apps/portal/backend/tests/test_git_service.py` for default GitHub provider selection, backward-compatible factory behavior, protocol aliasing, and unsupported-provider configuration errors.
 
 ---
 
