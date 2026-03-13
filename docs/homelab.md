@@ -2459,7 +2459,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 
 #### T6.3.3 Implement pod restart / rollout trigger (annotation checksum strategy)
 - **Description:** Define and implement restart strategy for ConfigMap/Secret changes. Recommended: add checksum annotation to Deployment/StatefulSet pod template spec when ConfigMap/Secret is patched. Argo CD applies annotation change → Kubernetes restarts pods. Document in ops runbook.
-- **Status:** TODO
+- **Status:** DONE (2026-03-13)
 - **Acceptance Criteria:**
   - Kustomize patch adds `checksum/config: <md5(configmap_data)>` annotation to pod spec when ConfigMap changes.
   - Pod restarts within 1 minute of PR merge & Argo sync.
@@ -2469,6 +2469,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** Medium
 - **Notes:** Alternative: use Sealed Secrets/SOPS Controller annotations (auto-restart on secret update). Implement whichever is already in use.
+- **Evidence:** Implemented in portal backend (`apps/portal/backend/app/config_editing.py`): `compute_config_checksum` (MD5 of sorted-key JSON of ConfigMap data), `update_deployment_patch_checksum` (injects/updates `checksum/config` annotation on `spec.template.metadata.annotations`). The `config/set` endpoint now commits both `runtime-config.yaml` and `patch-deployment.yaml` in the same PR. End-to-end verified on 2026-03-13: PR [wlodzimierrr/homelab-workloads#94](https://github.com/wlodzimierrr/homelab-workloads/pull/94) showed two-file diff (`LOG_LEVEL: debug → warning` + `checksum/config: 7fd9dfebb7127f4e01cbe456bdb90e72` added to pod template). On merge, Argo synced and pod `homelab-api-c5bc8d8dc-275mb` restarted within ~1 minute with migration job re-running cleanly. Service remained 1/1 Ready throughout rolling restart.
 
 #### T6.3.4 Portal UI: Config and secrets editing interface
 - **Description:** Add tabs to service detail page:
