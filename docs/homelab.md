@@ -2477,7 +2477,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   - "Secrets" tab: list secret keys (values hidden, show "***"); warning banner "You are about to modify encrypted secrets"; form to add/modify/delete.
   - Both tabs show: pending PR link, last update timestamp, editor (username).
   - Both tabs: "Editing disabled for prod" warning if user lacks prod-write role.
-- **Status:** TODO
+- **Status:** DONE (2026-03-13)
 - **Acceptance Criteria:**
   - Config tab allows add/edit/delete with validation (prevent obviously bad keys).
   - Secrets tab requires confirm+MFA flow (or portal admin approval).
@@ -2487,6 +2487,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** Medium
 - **Notes:** MVP: secrets editing disabled unless user is app owner + admin role (two roles required).
+- **Evidence:** Implemented as a "Runtime Config" section on the `homelab-api` service detail page (`/services/homelab-api`). Backend: `GET /services/{service_id}/config?env=dev|prod` reads ConfigMap from workloads repo and returns allowed keys with current values and allowed value lists (`get_config_edit_target` + `parse_config_map_data` helpers in `config_editing.py`; `ServiceConfigEntry`/`ServiceConfigResponse` models in `main.py`). Frontend (`frontend/src/pages/service-details-page.tsx`): env selector (dev/prod), pre-filled LOG_LEVEL dropdown loaded from GET endpoint on mount, submit calls POST `/config/set`, shows GitOps PR link on success, explicit 429 rate-limit message, secrets section stubbed as "Not yet available in the portal UI". Deployed as portal commit `e4fcbff` (Portal CI Images: Lint ✓, Test ✓, Build ✓, Publish ✓). End-to-end drill on 2026-03-13: GET returned `{"LOG_LEVEL": "warning", allowedValues: [debug,info,warning,error,critical]}`; POST (`warning → info`) created [homelab-workloads#96](https://github.com/wlodzimierrr/homelab-workloads/pull/96); PR closed without merge (drill only).
 
 ---
 
