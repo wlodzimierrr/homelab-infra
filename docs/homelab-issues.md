@@ -1,6 +1,6 @@
 # Homelab Portal Issues
 
-Last updated: 2026-03-11
+Last updated: 2026-03-13
 
 ## Current dev state
 
@@ -572,73 +572,6 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
   - If a deep-link cannot be built, the UI explains which required URL template or variable is missing.
 - **Risk:** Low
 
-### P1.15 Evaluate public routable portal/API hosts for external automation
-- **Status:** TODO
-- **Problem:** GitHub-hosted automation cannot reliably call private `.homelab.local` endpoints, which makes direct workflow-to-portal API writes brittle and blocks future webhook-style integrations.
-- **Evidence:** On 2026-03-10, `wlodzimierrr/homelab-portal` Actions run `#22904757614` failed in the `Record deployment requests in portal backend` step with `curl: (6) Could not resolve host: api.dev.homelab.local`. Current ingress hosts are private-only (`api.dev.homelab.local`, `portal.dev.homelab.local`), so GitHub-hosted runners cannot resolve them.
-- **Acceptance Criteria:**
-  - A decision is recorded for one of these paths:
-    - keep private-only ingress and rely on backend reconciliation for correctness, or
-    - expose a public portal host, or
-    - expose a narrowly scoped public API host for automation/webhooks.
-  - If a public host is adopted, DNS, TLS, auth, and ingress policy are configured and documented.
-  - GitHub-hosted automation can reach the chosen endpoint successfully from Actions.
-  - The chosen design documents security boundaries clearly, especially for any public API path.
-- **Likely Work Areas:**
-  - Public DNS/ingress hostnames under `*.wlodzimierrr.co.uk`.
-  - OAuth/UI auth for the portal vs. machine-to-machine auth for API endpoints.
-  - Rate limiting, narrow endpoint exposure, and optional IP allowlisting for automation paths.
-  - Updating workflow secrets and runbooks if a public endpoint becomes the preferred automation target.
-- **Risk:** Medium
-
-### P1.16 Plan single-cluster dual-environment isolation
-- **Status:** TODO
-- **Problem:** The current repo intentionally keeps prod workloads disabled in single-cluster safety mode, but there is no concrete design ticket for how dev and prod should coexist safely on one cluster if prod workloads are re-enabled later.
-- **Evidence:** `workloads/README.md`, `docs/architecture/deployment-flow.md`, and `docs/homelab.md` all state that `environments/prod/workloads` is intentionally empty and `allowEmpty: true` is kept to avoid accidental recreation of live prod apps in the same cluster. On 2026-03-10, the operator confirmed that separate live prod workloads were turned off because they were not currently needed and created extra observability complexity in a solo setup.
-- **Acceptance Criteria:**
-  - A written decision exists for whether to keep `prod` as Git intent only or to re-enable live prod workloads on the same cluster.
-  - If dual-env single-cluster mode is chosen, the design documents namespace layout, ingress hostnames, data separation, and resource isolation rules.
-  - The design names explicit prerequisites before prod workloads may be re-enabled.
-  - The decision is reflected in runbooks and GitOps structure so future changes do not drift from the chosen model.
-- **Likely Work Areas:**
-  - Namespace strategy such as `homelab-api-dev` / `homelab-api-prod` and `homelab-web-dev` / `homelab-web-prod`.
-  - Shared-platform vs. per-env workload boundaries.
-  - Separate secrets, databases, backups, and ingress hosts for each env.
-  - ResourceQuota, LimitRange, affinity, and NetworkPolicy guardrails between dev and prod.
-- **Risk:** Medium
-
-### P1.17 Add env-scoped observability and isolation guardrails for dual-env mode
-- **Status:** TODO
-- **Problem:** The main reason prod workloads were disabled was observability friction. If dev and prod ever run together again, dashboards, alerts, and logs must separate envs cleanly or the extra environment will keep creating operational noise.
-- **Evidence:** Operator confirmation on 2026-03-10 states that live prod workloads were switched off largely because the extra environment complicated observability. Existing docs already note that the current single-cluster mode keeps prod disabled to avoid accidental overlap and operational confusion.
-- **Acceptance Criteria:**
-  - Metrics, logs, and alerts are filterable and trustworthy by `env=dev|prod` for every canonical service.
-  - Grafana dashboards, Loki queries, and Alertmanager routes distinguish dev from prod without manual guesswork.
-  - Service identity and namespace conventions are reflected consistently in Prometheus labels, Loki labels, and alert metadata.
-  - A short drill proves that a prod-only signal does not appear as ambiguous dev noise, and vice versa.
-- **Likely Work Areas:**
-  - Prometheus/Loki label normalization for `service`, `env`, `namespace`, and `argoAppName`.
-  - Dashboard variables and alert templates that make env separation explicit.
-  - Namespace and ingress naming conventions that match the observability labels.
-  - Runbook updates for debugging when both envs coexist on one cluster.
-- **Risk:** Medium
-
-### P1.18 Re-enable prod workloads in single-cluster mode behind explicit guardrails
-- **Status:** TODO
-- **Problem:** The repo already contains prod overlay intent and gated promotion workflows, but there is no controlled ticket for re-enabling real prod workloads once the operator decides the cluster should host both envs again.
-- **Evidence:** `workloads/environments/prod/workloads-app.yaml` keeps `allowEmpty: true`, `workloads/environments/prod/workloads/kustomization.yaml` is intentionally empty, and `workloads/README.md` explicitly says `homelab-api-prod` / `homelab-web-prod` should remain absent unless a safe prod target exists.
-- **Acceptance Criteria:**
-  - Prod workloads can be enabled intentionally by reverting the current single-cluster safety guardrail in a documented way.
-  - Prod apps use isolated namespaces, secrets, ingress hosts, and data paths.
-  - Promotion and rollback evidence can reach real `promote -> live` and `rollback -> live` outcomes without colliding with dev.
-  - Observability, quotas, and network policies are validated before the guardrail is removed.
-- **Likely Work Areas:**
-  - Populate `environments/prod/workloads/kustomization.yaml` with the intended prod apps.
-  - Remove or narrow `allowEmpty: true` only when the target is actually ready.
-  - Create prod namespace overlays and env-specific data/secret wiring.
-  - Run a staged enablement: one service first, then full prod workloads.
-- **Risk:** High
-
 ### P1.19 Define a universal service observability contract
 - **Status:** DONE (2026-03-11)
 - **Problem:** The platform needed an explicit service observability contract so future services could declare one authoritative HTTP metrics mode instead of relying on implicit backend fallback behavior.
@@ -742,6 +675,89 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
   - Live `GET /services/oauth2-proxy/metrics/summary?range=24h` now returns `observabilityDiagnostics = { mode: "no-http", authority: "none", status: "unsupported", reason: "no_http_mode_declared" }`, which proves the portal now distinguishes intentionally unsupported HTTP metrics from missing or broken telemetry.
 - **Risk:** Medium
 
+### P1.15 Evaluate public routable portal/API hosts for external automation
+- **Status:** TODO
+- **Problem:** GitHub-hosted automation cannot reliably call private `.homelab.local` endpoints, which makes direct workflow-to-portal API writes brittle and blocks future webhook-style integrations.
+- **Evidence:** On 2026-03-10, `wlodzimierrr/homelab-portal` Actions run `#22904757614` failed in the `Record deployment requests in portal backend` step with `curl: (6) Could not resolve host: api.dev.homelab.local`. Current ingress hosts are private-only (`api.dev.homelab.local`, `portal.dev.homelab.local`), so GitHub-hosted runners cannot resolve them.
+- **Acceptance Criteria:**
+  - A decision is recorded for one of these paths:
+    - keep private-only ingress and rely on backend reconciliation for correctness, or
+    - expose a public portal host, or
+    - expose a narrowly scoped public API host for automation/webhooks.
+  - If a public host is adopted, DNS, TLS, auth, and ingress policy are configured and documented.
+  - GitHub-hosted automation can reach the chosen endpoint successfully from Actions.
+  - The chosen design documents security boundaries clearly, especially for any public API path.
+- **Likely Work Areas:**
+  - Public DNS/ingress hostnames under `*.wlodzimierrr.co.uk`.
+  - OAuth/UI auth for the portal vs. machine-to-machine auth for API endpoints.
+  - Rate limiting, narrow endpoint exposure, and optional IP allowlisting for automation paths.
+  - Updating workflow secrets and runbooks if a public endpoint becomes the preferred automation target.
+- **Risk:** Medium
+
+### P1.16 Plan single-cluster dual-environment isolation
+- **Status:** TODO
+- **Problem:** The current repo intentionally keeps prod workloads disabled in single-cluster safety mode, but there is no concrete design ticket for how dev and prod should coexist safely on one cluster if prod workloads are re-enabled later.
+- **Evidence:** `workloads/README.md`, `docs/architecture/deployment-flow.md`, and `docs/homelab.md` all state that `environments/prod/workloads` is intentionally empty and `allowEmpty: true` is kept to avoid accidental recreation of live prod apps in the same cluster. On 2026-03-10, the operator confirmed that separate live prod workloads were turned off because they were not currently needed and created extra observability complexity in a solo setup.
+- **Acceptance Criteria:**
+  - A written decision exists for whether to keep `prod` as Git intent only or to re-enable live prod workloads on the same cluster.
+  - If dual-env single-cluster mode is chosen, the design documents namespace layout, ingress hostnames, data separation, and resource isolation rules.
+  - The design names explicit prerequisites before prod workloads may be re-enabled.
+  - The decision is reflected in runbooks and GitOps structure so future changes do not drift from the chosen model.
+- **Likely Work Areas:**
+  - Namespace strategy such as `homelab-api-dev` / `homelab-api-prod` and `homelab-web-dev` / `homelab-web-prod`.
+  - Shared-platform vs. per-env workload boundaries.
+  - Separate secrets, databases, backups, and ingress hosts for each env.
+  - ResourceQuota, LimitRange, affinity, and NetworkPolicy guardrails between dev and prod.
+- **Risk:** Medium
+
+### P1.17 Add env-scoped observability and isolation guardrails for dual-env mode
+- **Status:** TODO
+- **Problem:** The main reason prod workloads were disabled was observability friction. If dev and prod ever run together again, dashboards, alerts, and logs must separate envs cleanly or the extra environment will keep creating operational noise.
+- **Evidence:** Operator confirmation on 2026-03-10 states that live prod workloads were switched off largely because the extra environment complicated observability. Existing docs already note that the current single-cluster mode keeps prod disabled to avoid accidental overlap and operational confusion.
+- **Acceptance Criteria:**
+  - Metrics, logs, and alerts are filterable and trustworthy by `env=dev|prod` for every canonical service.
+  - Grafana dashboards, Loki queries, and Alertmanager routes distinguish dev from prod without manual guesswork.
+  - Service identity and namespace conventions are reflected consistently in Prometheus labels, Loki labels, and alert metadata.
+  - A short drill proves that a prod-only signal does not appear as ambiguous dev noise, and vice versa.
+- **Likely Work Areas:**
+  - Prometheus/Loki label normalization for `service`, `env`, `namespace`, and `argoAppName`.
+  - Dashboard variables and alert templates that make env separation explicit.
+  - Namespace and ingress naming conventions that match the observability labels.
+  - Runbook updates for debugging when both envs coexist on one cluster.
+- **Risk:** Medium
+
+### P1.18 Re-enable prod workloads in single-cluster mode behind explicit guardrails
+- **Status:** TODO
+- **Problem:** The repo already contains prod overlay intent and gated promotion workflows, but there is no controlled ticket for re-enabling real prod workloads once the operator decides the cluster should host both envs again.
+- **Evidence:** `workloads/environments/prod/workloads-app.yaml` keeps `allowEmpty: true`, `workloads/environments/prod/workloads/kustomization.yaml` is intentionally empty, and `workloads/README.md` explicitly says `homelab-api-prod` / `homelab-web-prod` should remain absent unless a safe prod target exists.
+- **Acceptance Criteria:**
+  - Prod workloads can be enabled intentionally by reverting the current single-cluster safety guardrail in a documented way.
+  - Prod apps use isolated namespaces, secrets, ingress hosts, and data paths.
+  - Promotion and rollback evidence can reach real `promote -> live` and `rollback -> live` outcomes without colliding with dev.
+  - Observability, quotas, and network policies are validated before the guardrail is removed.
+- **Likely Work Areas:**
+  - Populate `environments/prod/workloads/kustomization.yaml` with the intended prod apps.
+  - Remove or narrow `allowEmpty: true` only when the target is actually ready.
+  - Create prod namespace overlays and env-specific data/secret wiring.
+  - Run a staged enablement: one service first, then full prod workloads.
+- **Risk:** High
+
+### P1.23 Investigate catalog-sync CronJob persistent failures (2026-03-13 regression)
+- **Status:** TODO
+- **Problem:** The `homelab-api-catalog-sync` CronJob has been consistently failing across multiple runs since at least 2026-03-13. Every Job pod in the `homelab-api` namespace shows `Error` status (except one `Completed` pod per run group). P1.1 was previously marked DONE on 2026-03-06, indicating a regression has occurred.
+- **Evidence:** Observed on 2026-03-13 during T6.3.3 verification: runs `29556870`, `29556910`, `29556920`, `29556930`, `29556950`, `29556960`, `29556970` all produced at least one `Error` pod. Each run group shows 2 pods — one `Error` and one `Completed` or `Error`, suggesting retries or parallel execution where at least one path reliably fails.
+- **Acceptance Criteria:**
+  - Root cause of failure identified from pod logs (`kubectl logs -n homelab-api -l job-name=...`).
+  - CronJob resumes clean runs (all pods `Completed`, no `Error`).
+  - If a regression in app code or config is found, a fix is deployed and validated.
+  - If a transient infra issue, root cause is documented and a watchdog or alert is in place.
+- **Likely Work Areas:**
+  - Postgres connectivity from within the Job pod (previously an intermittent issue per P2.2).
+  - GitOps repo access credentials expired or rotated.
+  - Kubernetes API egress blocked (network policy regression).
+  - Image or script regression introduced by a recent deploy.
+- **Risk:** Medium
+
 ## Suggested execution order
 
 1. P0.1 GitOps repo access
@@ -758,4 +774,5 @@ Result: `L3.8` is satisfied. The deployment history timeline now exposes mixed-a
 12. P1.16 single-cluster dual-env isolation plan
 13. P1.17 env-scoped observability and isolation guardrails
 14. P1.18 guarded prod re-enablement in single-cluster mode
-15. P2.2 intermittent Postgres reachability during scheduled syncs
+15. P1.23 catalog-sync CronJob regression triage
+16. P2.2 intermittent Postgres reachability during scheduled syncs
