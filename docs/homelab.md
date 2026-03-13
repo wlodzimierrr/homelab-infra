@@ -2424,7 +2424,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   5. Creates PR with commit message "Config: {service} {env} {key}={value}".
   6. Returns PR URL.
   - Alternative simpler MVP: no validation, just require env var name convention (e.g. `APP_*` only).
-- **Status:** TODO
+- **Status:** DONE (2026-03-13)
 - **Acceptance Criteria:**
   - Input validation rejects obvious secrets (contains PASSWORD, API_KEY, TOKEN, SECRET in name or typical secret patterns in value).
   - PR diff shows only ConfigMap patched object with updated data.
@@ -2434,6 +2434,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** M
 - **Risk:** High
 - **Notes:** Prevent accidental plaintext secrets by name-based heuristic. For MVP, allow portal admin to explicitly allow keys; do not auto-open to all env vars.
+- **Evidence:** End-to-end drill on 2026-03-13 confirmed the endpoint live. `POST /api/services/homelab-api/config/set` with payload `{env: "dev", configKey: "LOG_LEVEL", configValue: "warning"}` returned status `accepted`, created branch `automation/dev-config-homelab-api-log-level-20260313140913`, and opened PR [wlodzimierrr/homelab-workloads#92](https://github.com/wlodzimierrr/homelab-workloads/pull/92) with title "Config: homelab-api dev LOG_LEVEL updated". PR diff showed a single-line change in `apps/homelab-api/envs/dev/runtime-config.yaml` (`LOG_LEVEL: debug` → `LOG_LEVEL: warning`). PR was reviewed and closed without merge (`T6.3.1 safe config-edit drill completed; not merging yet.`). Response included `previousValue`, `branchName`, `gitPrUrl`, `configFilePath`, and `initiatedAt` — all acceptance criteria for the endpoint shape confirmed.
 
 #### T6.3.2 Portal API: "Edit secrets (SOPS/Sealed Secrets)" endpoint
 - **Description:** `POST /api/services/{service_id}/config/set-secret` endpoint that:
@@ -2443,7 +2444,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
   4. If Sealed Secrets: call sealed-secret controller API to seal value.
   5. Creates PR with commit "Secret: {service} {env} {key} updated".
   6. Returns PR URL (user reviews PR in GitHub; actual secret value not visible in portal).
-- **Status:** IN PROGRESS (2026-03-12)
+- **Status:** DONE (2026-03-13)
 - **Acceptance Criteria:**
   - Secret value never logged or stored in unencrypted form.
   - PR shows encrypted/sealed value only (never plaintext).
@@ -2454,7 +2455,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Complexity:** L
 - **Risk:** High
 - **Notes:** This is high-risk: leaking a secret value is catastrophic. Require explicit token/MFA for secret edits. Consider requiring portal admin approval before PR creation.
-- **Implementation Note:** Implemented locally on 2026-03-12 as `POST /services/{service_id}/config/set-secret` using the current SOPS runtime path only. The backend now reads the allow-listed encrypted manifest from `homelab-workloads`, decrypts it with the mounted age key, updates only the requested allow-listed key, re-encrypts the file with `sops`, opens a PR, and returns PR metadata without exposing plaintext. A new operator bootstrap script `workloads/scripts/bootstrap-runtime-sops-age-key.sh` provisions the runtime age key Secret `homelab-api-sops-age` for the API pod. The remaining gap is one live end-to-end drill proving a real secret edit PR is created and applied successfully from the deployed portal path.
+- **Implementation Note:** Implemented and live-proven on 2026-03-13 as `POST /services/{service_id}/config/set-secret` using the current SOPS runtime path. The backend reads the allow-listed encrypted manifest from `homelab-workloads`, decrypts it with the mounted age key, updates only the requested allow-listed key, re-encrypts the file with `sops`, opens a PR, and returns PR metadata without exposing plaintext. `workloads/scripts/bootstrap-runtime-sops-age-key.sh` now provisions the runtime age key Secret `homelab-api-sops-age` for the API pod. A safe live drill created `homelab-workloads` PR `#90` (`Secret: oauth2-proxy dev OAUTH2_PROXY_COOKIE_SECRET updated`) touching only `apps/homelab-web/envs/dev/oauth2-proxy-secret.enc.yaml`, and the diff contained encrypted SOPS content only. The PR was intentionally left for operator review/close rather than merge, because rotating the live oauth2-proxy cookie secret would invalidate active sessions.
 
 #### T6.3.3 Implement pod restart / rollout trigger (annotation checksum strategy)
 - **Description:** Define and implement restart strategy for ConfigMap/Secret changes. Recommended: add checksum annotation to Deployment/StatefulSet pod template spec when ConfigMap/Secret is patched. Argo CD applies annotation change → Kubernetes restarts pods. Document in ops runbook.
