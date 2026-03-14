@@ -1,6 +1,6 @@
 # Homelab Pre-Level-3 TODO
 
-Last updated: 2026-03-10
+Last updated: 2026-03-14
 
 This backlog tracks the work required to move from Phase 5 read-only observability into Portal Level 3.
 
@@ -245,3 +245,91 @@ These tickets map directly to the remaining `FAIL` and `PARTIAL` rows in `docs/h
 ## After these are done
 
 Once every `L3.x` ticket above is complete, rerun `docs/runbooks/portal-level3-readiness-audit.md`. Level 3 is ready to start only when the readiness gates remain green and the Render-like checklist has no blocking `FAIL` rows.
+
+---
+
+## Feature Backlog
+
+Post-Level-3 feature expansion tickets. These do not block Level 3 entry; they extend the scaffold and portal capability once the core platform is stable.
+
+### T6.4.5 Scaffold template: database add-on (PostgreSQL / MySQL)
+- **Status:** TODO
+- **Description:** Extend the scaffold generator (both `workloads/scripts/scaffold-service.py` and the portal wizard `POST /scaffold/*`) to accept an optional `--add-on database` flag with a `--db-engine postgres|mysql` choice. When selected, the scaffold generates additional manifests alongside the base app:
+  - `StatefulSet` for the database with a named `volumeClaimTemplate` (PVC).
+  - `Service` (ClusterIP) for in-cluster connectivity.
+  - `NetworkPolicy` allowing only the app pods to reach the DB on the engine's port.
+  - A SOPS-encrypted `Secret` stub (`<service>-db-credentials`) with placeholder values and a comment pointing to the SOPS runbook.
+  - For PostgreSQL: a `migration-job.yaml` (Argo CD Sync hook) modelled on the `homelab-api` pattern — waits for DB readiness, runs `alembic upgrade head` (or a configurable command), retries on failure.
+  - For MySQL: equivalent init-job using `mysql -e "SOURCE /init.sql"` pattern; no Alembic dependency.
+  - `catalog-service.yaml` observability mode stays `app-native` (unchanged).
+- **Acceptance Criteria:**
+  - `--add-on database --db-engine postgres` generates all manifests above; kustomize renders without errors.
+  - `--add-on database --db-engine mysql` generates MySQL equivalents; kustomize renders without errors.
+  - Smoke test extended with a postgres-add-on variant that checks the extra file count and renders both overlays.
+  - Portal wizard gains a "Database add-on" toggle in Step 2 (Template) with engine selector; preview step shows the extra files.
+  - `validate-services-catalog.py` passes unchanged (no new catalog fields required).
+  - No plaintext credentials committed; guardrails still catch unencrypted `Secret` kind.
+- **Dependencies:** T6.4.2, T6.4.3, T6.4.4
+- **Complexity:** M
+- **Risk:** Low
+- **Notes:** Follow the `homelab-api` Postgres pattern as the reference implementation. MySQL is a parallel path — same structure, different image and port. Keep migration job optional behind a `--migration-command` flag so static sites scaffolded with this add-on don't get an unwanted job.
+
+---
+
+### T6.4.6 Scaffold template: WordPress bundle
+- **Status:** TODO
+- **Description:** Add a `wordpress` template to the scaffold generator and portal wizard. WordPress is a pre-built image (no custom Dockerfile / CI workflow), so the scaffold output differs from the `python-fastapi` and `static-nginx` paths:
+  - **No** application repo scaffold and no `.github/workflows/build-*.yml` — the wizard skips the image-repo field or marks it as read-only (`wordpress:latest` or a pinned tag).
+  - GitOps manifests:
+    - `Deployment` for the WordPress container with `WORDPRESS_DB_*` env vars sourced from a Secret.
+    - `PersistentVolumeClaim` for `/var/www/html/wp-content` (uploaded media and plugins).
+    - `Service` (ClusterIP).
+    - `Ingress` (same Traefik pattern as other templates).
+    - MySQL `StatefulSet` + `Service` + `NetworkPolicy` (reuse the DB add-on manifests from T6.4.5).
+    - SOPS-encrypted `Secret` stub for `WORDPRESS_DB_PASSWORD` / `MYSQL_ROOT_PASSWORD`.
+    - `NetworkPolicy` allowing only the WordPress pod to reach MySQL.
+  - `observability.mode: ingress-derived` in `services.yaml` (no `/metrics` endpoint).
+  - No `ServiceMonitor` generated.
+  - Prod overlay: same single-cluster safety-mode comment as other templates.
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template wordpress` generates the full manifest set; kustomize renders both overlays without errors.
+  - Portal wizard shows `WordPress` as a template option in Step 2; image-repo field is hidden or pre-filled.
+  - Smoke test extended with a WordPress variant checking file count (should be fewer than python-fastapi since no servicemonitor/CI workflow).
+  - Catalog entry uses `mode: ingress-derived`.
+  - Guardrails still catch any unencrypted `Secret` kind in the generated output.
+- **Dependencies:** T6.4.2, T6.4.3, T6.4.5 (MySQL add-on manifests)
+- **Complexity:** M
+- **Risk:** Low
+- **Notes:** WordPress upgrades and plugin management are out of scope for the scaffold — the generated manifests are a starting point only. Document the SOPS secret rotation steps in a short runbook section alongside the generated README.
+
+---
+
+### T6.4.7 Public hostname management — service card editor and wizard field
+- **Status:** TODO
+- **Description:** Allow operators to view and update the public hostname for a service (e.g. `portal.wlodzimierrr.co.uk`) both when registering a new service via the wizard and from an existing service card in the portal. The hostname maps to the Ingress `host` field in the GitOps overlay and is the externally routable DNS name.
+
+  **New service wizard (Step 3 — Configuration):**
+  - Add `Public hostname` field (optional). Default pre-filled as `<name>.<base-domain>` derived from a portal config env var `PUBLIC_BASE_DOMAIN`.
+  - Separate from `devHost` / `prodHost` — this field sets the production-facing external name; `devHost` remains the internal `.homelab.local` name.
+  - Value written into `apps/<name>/envs/prod/patch-ingress.yaml` as the prod Ingress host.
+  - Store alongside the catalog entry in `services.yaml` under `envs[prod].public_host`.
+
+  **Service card editor (existing service):**
+  - Add a `Public hostname` row to the service settings/details panel (read + edit modes).
+  - Edit mode shows an input field pre-filled from `services.yaml` `envs[prod].public_host`.
+  - On save: backend creates a GitOps PR that updates `apps/<service>/envs/prod/patch-ingress.yaml` host field and `services.yaml` `envs[prod].public_host` in a single commit; returns PR URL shown inline.
+  - Requires `require_admin` auth (same as scaffold submit).
+  - Dev hostname remains editable separately or is out of scope for this ticket (internal only).
+
+- **Acceptance Criteria:**
+  - Wizard Step 3 shows `Public hostname` field; generated `patch-ingress.yaml` in the prod overlay contains the supplied value.
+  - `services.yaml` written by wizard includes `envs[prod].public_host`.
+  - `validate-services-catalog.py` accepts the new optional `public_host` field (string, non-empty if present).
+  - Service card reads and displays `public_host` from catalog data.
+  - Edit + save flow opens a PR with only the two changed files; PR URL returned to UI.
+  - No-op save (hostname unchanged) is detected backend-side and returns a `204` without opening a PR.
+  - Smoke test updated to verify `public_host` in the generated `services.yaml` when `--prod-host` is supplied.
+- **Dependencies:** T6.4.3, T6.4.4, T6.1.4 (GitOps PR flow)
+- **Complexity:** M
+- **Risk:** Low
+- **Notes:** DNS record creation is out of scope — the ticket only manages the Ingress host. Add a note in the PR body reminding the operator to point the DNS record at the cluster ingress IP. `PUBLIC_BASE_DOMAIN` should default to `homelab.local` when not set so the wizard works without configuration in dev.
