@@ -23,6 +23,12 @@ argocd_cm_data:
   url: "https://argocd.wlodzimierrr.co.uk"
   "server.insecure": "false"
   "admin.enabled": "false"
+  "kustomize.buildOptions": "--enable-alpha-plugins --enable-exec"
+
+argocd_enable_ksops: true
+argocd_ksops_version: "v4.4.0"
+argocd_ksops_init_image: "busybox:1.36.1"
+argocd_sops_age_key_secret_name: "argocd-sops-age"
 
 argocd_enable_local_accounts: true
 argocd_local_accounts_password_mtime: "2026-01-01T00:00:00Z"

@@ -207,6 +207,82 @@
     executable: /bin/bash
   when: argocd_enable_server_security_patch | default(false)
 
+- name: Assert SOPS age key secret exists when ksops integration is enabled
+  shell: |
+    set -euo pipefail
+    kubectl -n "{{ argocd_namespace }}" get secret "{{ argocd_sops_age_key_secret_name }}"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: argocd_enable_ksops | default(false)
+
+- name: Patch argocd-repo-server for ksops and SOPS age support
+  shell: |
+    set -euo pipefail
+    ns="{{ argocd_namespace }}"
+    kubectl -n "$ns" patch deploy argocd-repo-server --type='strategic' -p='{{ {
+      "spec": {
+        "template": {
+          "spec": {
+            "volumes": [
+              {
+                "name": "custom-tools",
+                "emptyDir": {}
+              },
+              {
+                "name": "sops-age-key",
+                "secret": {
+                  "secretName": argocd_sops_age_key_secret_name
+                }
+              }
+            ],
+            "initContainers": [
+              {
+                "name": "install-ksops",
+                "image": argocd_ksops_init_image,
+                "command": ["/bin/sh", "-c"],
+                "args": [
+                  "set -euo pipefail\nwget -qO- \"https://github.com/viaduct-ai/kustomize-sops/releases/download/" ~ argocd_ksops_version ~ "/ksops_latest_Linux_x86_64.tar.gz\" | tar -xz -C /custom-tools\nchmod 0755 /custom-tools/ksops\n"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "custom-tools",
+                    "mountPath": "/custom-tools"
+                  }
+                ]
+              }
+            ],
+            "containers": [
+              {
+                "name": "argocd-repo-server",
+                "env": [
+                  {
+                    "name": "SOPS_AGE_KEY_FILE",
+                    "value": "/home/argocd/.config/sops/age/keys.txt"
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "custom-tools",
+                    "mountPath": "/usr/local/bin/ksops",
+                    "subPath": "ksops"
+                  },
+                  {
+                    "name": "sops-age-key",
+                    "mountPath": "/home/argocd/.config/sops/age",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    } | to_json }}'
+  args:
+    executable: /bin/bash
+  when: argocd_enable_ksops | default(false)
+
 - name: Render Argo CD server network policy
   template:
     src: argocd_networkpolicy.yml.j2

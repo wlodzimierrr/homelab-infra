@@ -35,23 +35,23 @@ This manifest includes:
 
 ## 3. Configure portal oauth2-proxy forward-auth (dev)
 
-Create/update oauth2-proxy secret out-of-band (do not commit credentials):
+Create/update the encrypted oauth2-proxy secret in Git:
 
 ```bash
-kubectl -n homelab-web create secret generic oauth2-proxy-secret \
-  --from-literal=OAUTH2_PROXY_CLIENT_ID='<PORTAL_GH_CLIENT_ID>' \
-  --from-literal=OAUTH2_PROXY_CLIENT_SECRET='<PORTAL_GH_CLIENT_SECRET>' \
-  --from-literal=OAUTH2_PROXY_COOKIE_SECRET="$(openssl rand -base64 32)" \
-  --dry-run=client -o yaml | kubectl apply -f -
+cd workloads
+./scripts/bootstrap-sops-oauth2-proxy-secret.sh dev
+./scripts/render-kustomize.sh apps/homelab-web/envs/dev >/dev/null
 ```
 
-Then apply the dev overlay:
+Then commit/push the encrypted secret:
 
 ```bash
-kubectl apply -k workloads/apps/homelab-web/envs/dev
+git add apps/homelab-web/envs/dev/oauth2-proxy-secret.enc.yaml
+git commit -m "chore(secrets): add oauth2-proxy dev secret to GitOps"
+git push origin main
 ```
 
-The dev overlay adds:
+Argo CD auto-sync should reconcile the updated dev overlay. The dev overlay adds:
 
 1. `oauth2-proxy` Deployment/Service/Secret
 2. Traefik `oauth2-errors` + `oauth2-forward-auth` middleware
@@ -86,6 +86,9 @@ Confirm `groups` contains the expected team and that resulting role matches `arg
 Portal auth and roles:
 
 ```bash
+argocd app get homelab-web-dev --grpc-web
+kubectl -n homelab-web get secret oauth2-proxy-secret
+kubectl -n homelab-web rollout status deploy/oauth2-proxy --timeout=300s
 curl -i http://portal.dev.homelab.local/
 curl -i -X POST 'http://portal.dev.homelab.local/api/service-registry/sync?source=gitops_apps&env=dev' \
   -H 'X-Auth-Request-User: alice' \
