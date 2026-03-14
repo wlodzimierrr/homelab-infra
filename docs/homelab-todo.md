@@ -349,3 +349,39 @@ Post-Level-3 feature expansion tickets. These do not block Level 3 entry; they e
 - **Complexity:** M
 - **Risk:** Low
 - **Notes:** DNS record creation is out of scope — the ticket only manages the Ingress host. Add a note in the PR body reminding the operator to point the DNS record at the cluster ingress IP. `PUBLIC_BASE_DOMAIN` should default to `homelab.local` when not set so the wizard works without configuration in dev.
+
+---
+
+### PORTAL-AUTH-1 OAuth2 proxy authorization: Add operator to admin groups
+- **Status:** TODO
+- **Description:** Operators attempting to access restricted portal endpoints (e.g., `/api/scaffold/preview`) receive `403 Forbidden` errors because their OAuth2-authenticated identity is not in the `PORTAL_ADMIN_GROUPS` or `PORTAL_ADMIN_USERS` environment variables. The `require_admin()` middleware in `apps/portal/backend/app/main.py` checks these groups/users and rejects non-admin access, but development tokens (`dev-static-token`) bypass this check. In OAuth2 proxy flow, the user's GitHub username is passed in `X-Auth-Request-User` header instead of the token, so the bypass doesn't apply.
+- **Acceptance Criteria:**
+  - [ ] Identify the GitHub username or group for the operator(s) requiring scaffold and admin access.
+  - [ ] Update `PORTAL_ADMIN_USERS` or `PORTAL_ADMIN_GROUPS` environment variable in the `homelab-web` deployment to include the operator's identity.
+  - [ ] Redeploy `homelab-web` pod or restart the deployment to pick up the new env var.
+  - [ ] Verify `POST /api/scaffold/preview` returns `200` instead of `403` for the authorized user.
+  - [ ] Document the admin user/group configuration in `docs/runbooks/homelab-api-service-operations.md`.
+- **Dependencies:** None
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** Temporary workaround: bypass OAuth2 proxy entirely and hit the API directly (see PORTAL-AUTH-2). Long-term fix is this ticket.
+
+### PORTAL-AUTH-2 Portal API authorization: Improve scope-based access control
+- **Status:** TODO
+- **Description:** The current `require_admin()` middleware treats all admin endpoints the same, requiring either admin user or admin group membership. As the portal grows, different endpoints will need different permission levels (e.g., scaffold operators vs. deployment admins vs. read-only viewers). This ticket introduces a more granular scope-based authorization model so that:
+  - Scaffold endpoints (preview, submit) can check for a `scaffold` scope in the OAuth2 token or a specific group.
+  - Deployment endpoints (promote, rollback) can check for a `deployment` scope.
+  - Admin-only endpoints (cluster settings, secrets) remain restricted to `admin` scope.
+  - Development tokens (`dev-static-token`) can be granted scopes for testing without requiring admin privileges.
+- **Acceptance Criteria:**
+  - [ ] Extend `get_current_user()` to parse scopes from OAuth2 token claims (aud, scope, custom claims as applicable).
+  - [ ] Create new middleware functions: `require_scope(scope: str)` in addition to or replacing `require_admin()`.
+  - [ ] Update scaffold endpoints to use `require_scope("scaffold")` instead of `require_admin()`.
+  - [ ] Update deployment mutation endpoints to use `require_scope("deployment")` instead of `require_admin()`.
+  - [ ] Preserve backwards compatibility: existing `require_admin()` calls still work for high-privilege endpoints.
+  - [ ] Add integration tests verifying scope-based rejection (403) and acceptance (200) for each endpoint type.
+  - [ ] Document scope mapping (GitHub groups to scopes) in `docs/runbooks/homelab-api-service-operations.md`.
+- **Dependencies:** PORTAL-AUTH-1 (needed to verify OAuth2 proxy group passing)
+- **Complexity:** M
+- **Risk:** Medium
+- **Notes:** Research OAuth2 library scope handling in FastAPI; consider using `python-jose` or `fastapi-oauth2-scopes`. Keep a mapping file or env var for translating GitHub groups -> OAuth2 scopes to avoid hardcoding group names in middleware.
