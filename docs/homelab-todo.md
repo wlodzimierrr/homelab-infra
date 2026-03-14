@@ -253,7 +253,7 @@ Once every `L3.x` ticket above is complete, rerun `docs/runbooks/portal-level3-r
 Post-Level-3 feature expansion tickets. These do not block Level 3 entry; they extend the scaffold and portal capability once the core platform is stable.
 
 ### T6.4.5 Scaffold template: database add-on (PostgreSQL / MySQL)
-- **Status:** TODO
+- **Status:** DONE (2026-03-14)
 - **Description:** Extend the scaffold generator (both `workloads/scripts/scaffold-service.py` and the portal wizard `POST /scaffold/*`) to accept an optional `--add-on database` flag with a `--db-engine postgres|mysql` choice. When selected, the scaffold generates additional manifests alongside the base app:
   - `StatefulSet` for the database with a named `volumeClaimTemplate` (PVC).
   - `Service` (ClusterIP) for in-cluster connectivity.
@@ -263,16 +263,32 @@ Post-Level-3 feature expansion tickets. These do not block Level 3 entry; they e
   - For MySQL: equivalent init-job using `mysql -e "SOURCE /init.sql"` pattern; no Alembic dependency.
   - `catalog-service.yaml` observability mode stays `app-native` (unchanged).
 - **Acceptance Criteria:**
-  - `--add-on database --db-engine postgres` generates all manifests above; kustomize renders without errors.
-  - `--add-on database --db-engine mysql` generates MySQL equivalents; kustomize renders without errors.
-  - Smoke test extended with a postgres-add-on variant that checks the extra file count and renders both overlays.
-  - Portal wizard gains a "Database add-on" toggle in Step 2 (Template) with engine selector; preview step shows the extra files.
-  - `validate-services-catalog.py` passes unchanged (no new catalog fields required).
-  - No plaintext credentials committed; guardrails still catch unencrypted `Secret` kind.
+  - ✓ `--add-on database --db-engine postgres` generates all manifests above; kustomize renders without errors.
+  - ✓ `--add-on database --db-engine mysql` generates MySQL equivalents; kustomize renders without errors.
+  - ✓ Smoke test extended with a postgres-add-on variant that checks the extra file count and renders both overlays.
+  - ⊘ Portal wizard gains a "Database add-on" toggle in Step 2 (Template) with engine selector; preview step shows the extra files. (moved to T6.4.5.1)
+  - ✓ `validate-services-catalog.py` passes unchanged (no new catalog fields required).
+  - ✓ No plaintext credentials committed; guardrails still catch unencrypted `Secret` kind.
 - **Dependencies:** T6.4.2, T6.4.3, T6.4.4
 - **Complexity:** M
 - **Risk:** Low
-- **Notes:** Follow the `homelab-api` Postgres pattern as the reference implementation. MySQL is a parallel path — same structure, different image and port. Keep migration job optional behind a `--migration-command` flag so static sites scaffolded with this add-on don't get an unwanted job.
+- **Notes:** Follow the `homelab-api` Postgres pattern as the reference implementation. MySQL is a parallel path — same structure, different image and port. Keep migration job optional behind a `--migration-command` flag so static sites scaffolded with this add-on don't get an unwanted job. CLI implementation complete and tested 2026-03-14; portal wizard UI deferred to T6.4.5.1.
+
+### T6.4.5.1 Portal wizard: database add-on UI
+- **Status:** DONE (2026-03-14)
+- **Description:** Add portal wizard UI support for the database add-on feature completed in T6.4.5. Extend the `POST /scaffold/*` endpoint and the frontend wizard component to allow operators to select a database engine (PostgreSQL or MySQL) when creating a new service. The wizard should display database addon files in the preview step and pass the database engine choice to the backend scaffold generator.
+- **Acceptance Criteria:**
+  - ✅ Portal wizard Step 2 (Template selection) shows a "Database add-on" checkbox or toggle below the template choice.
+  - ✅ When "Database add-on" is checked, an engine dropdown appears with options: `postgres` (default) and `mysql`.
+  - ✅ Optionally, a "Migration command" text input allows custom migration/init commands (default: `alembic upgrade head` for postgres, empty for mysql).
+  - ✅ Preview step lists all generated database addon files: StatefulSet, Service, NetworkPolicy, Secret, and migration/init job.
+  - ✅ `POST /scaffold-submit` backend endpoint accepts `addon_engine` and `addon_migration_command` query parameters and passes them to `scaffold-service.py`.
+  - ✅ Validation ensures addon engine is only set when addon_database is enabled.
+  - ✅ UI disables custom migration input for static-nginx template (no app container to run migrations) if database addon is selected.
+- **Dependencies:** T6.4.5, T6.1.3 (existing scaffold submit endpoint)
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** The backend scaffold generator and CLI are complete (T6.4.5); this ticket was pure UI integration. Reused existing style and patterns from the template and observability-mode selectors. Implementation completed end-to-end with all tests passing (postgres, mysql, baseline variants).
 
 ---
 
