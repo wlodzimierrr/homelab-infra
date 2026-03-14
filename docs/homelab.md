@@ -2567,18 +2567,18 @@ The six readiness gates above are green and the Render-like checklist is now ful
       tags: [core, python, fastapi]
   ```
   Maintain by hand initially; later: auto-generate from scaffold.
-- **Status:** TODO
+- **Status:** DONE (2026-03-14)
 - **Acceptance Criteria:**
-  - Schema defined and validated (JSON Schema or similar).
-  - All currently deployed services (homelab-api, homelab-web, etc.) registered.
-  - service-name lookup returns all metadata needed for deploy/promote/config workflows.
-  - Portal uses this as service directory (search, filter, list).
-  - Canonical identity mapping is explicit and validated for every env: `serviceId`, `argo_app`, `namespace`, `app.kubernetes.io/name`, `app.kubernetes.io/instance`, `env`.
-  - Registry metadata is sufficient to build Prometheus/Loki selectors and release/deployment joins without manual aliasing.
+  - Schema defined and validated (JSON Schema or similar). ✅ `workloads/scripts/validate-services-catalog.py` (pyyaml-based, ~200 lines) enforces required fields, `service_id` kebab-case + uniqueness, `observability.mode` enum, env name/field/structure rules.
+  - All currently deployed services (homelab-api, homelab-web, etc.) registered. ✅ 3 services in `workloads/services.yaml`: homelab-api, homelab-web, oauth2-proxy.
+  - service-name lookup returns all metadata needed for deploy/promote/config workflows. ✅
+  - Portal uses this as service directory (search, filter, list). ✅ (via existing service registry integration)
+  - Canonical identity mapping is explicit and validated for every env. ✅
+  - Registry metadata is sufficient to build Prometheus/Loki selectors and release/deployment joins without manual aliasing. ✅
 - **Dependencies:** T6.4.1, T1.2.3 (services exist), T4.4.1
 - **Complexity:** S
 - **Risk:** Low
-- **Change Note:** Extended to enforce canonical service identity fields and label conventions across platform integrations.
+- **Change Note:** Extended to enforce canonical service identity fields and label conventions across platform integrations. Validator wired into `smoke-test-scaffold-generator.sh` so new scaffolds are verified against the schema on every CI run.
 
 ---
 
