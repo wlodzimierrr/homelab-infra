@@ -2516,7 +2516,8 @@ The six readiness gates above are green and the Render-like checklist is now ful
   3. Generates CI stub (GitHub Actions `.github/workflows/build-{service}.yml`) that: builds image, runs tests, publishes to registry.
   4. Registers service in `workloads/services.yaml` with metadata.
   5. Creates PR with all files + instructions for follow-up.
-- **Status:** TODO
+- **Status:** DONE (2026-03-14)
+- **Evidence:** `workloads/scripts/scaffold-service.py` (1240 lines) + `scaffold-service.sh` wrapper. Generates base manifests, dev/prod overlays, Argo Application YAMLs, AppProject entry, `services.yaml` catalog entry, repo stub (Dockerfile, CI workflow, app skeleton). Smoke test (`scripts/smoke-test-scaffold-generator.sh`) passes — kustomize build valid for dev overlay, prod overlay, environments/dev, environments/prod. Documented with examples in `workloads/README.md` (lines 118–165). Templates: `python-fastapi` and `static-nginx`.
 - **Acceptance Criteria:**
   - Script outputs a generated folder tree matching conventions.
   - Generated manifests are valid and deployable via `kustomize build`.
@@ -2536,7 +2537,8 @@ The six readiness gates above are green and the Render-like checklist is now ful
   3. Step 3: Configure image registry and build CI tool.
   4. Step 4: Review generated manifests and confirm.
   5. Calls backend endpoint that runs `scaffold-service.sh` with inputs and returns PR URL.
-- **Status:** TODO
+- **Status:** DONE (2026-03-14)
+- **Evidence:** "New service" button on services list page opens a 4-step modal wizard (Basic info → Template → Configuration → Review & confirm). Step 4 calls `POST /scaffold/preview` which reads live `services.yaml`, `kustomization.yaml`, `bootstrap/project-homelab.yaml` from GitHub and generates the full file tree for review. Confirm calls `POST /scaffold/submit` which creates a branch + single commit (17–18 files) + opens a PR, returning the PR URL shown inline. Backend generation logic in `app/scaffold_service.py` (pure functions, 28 tests pass). `PageShell` updated with optional `action` slot. Build passes. Backend note: runs scaffold generation inline (no subprocess) so it works in the Kubernetes pod without the workloads repo mounted.
 - **Acceptance Criteria:**
   - Wizard shows generated manifests for manual review before PR creation.
   - Back/next buttons allow revision.
