@@ -2,6 +2,8 @@
 
 This folder stores Architecture Decision Records (ADRs) for the homelab.
 
+Current-state architecture diagrams live in [`../architecture`](../architecture/README.md).
+
 ## How to add an ADR
 
 1. Copy [`_template.md`](_template.md).
@@ -17,3 +19,5 @@ This folder stores Architecture Decision Records (ADRs) for the homelab.
 - [0004: Manifest layering strategy (Kustomize overlays over Helm values)](0004-manifest-layering-kustomize-over-helm-values.md)
 - [0005: Day-0 vs Day-2 Ownership Model](0005-day-0-vs-day-2-ownership-model.md)
 - [0006: OAuth provider vs Cloudflare Zero Trust](0006-oauth-vs-cloudflare-zero-trust.md)
+- [0007: Portal-to-Git workflow model](0007-portal-to-git-workflow-model.md)
+- [0008: Service metadata storage and registration model](0008-service-metadata-storage-model.md)

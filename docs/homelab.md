@@ -2495,7 +2495,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 
 #### T6.4.1 Write ADR: Service metadata storage and registration model
 - **Description:** Decide whether service metadata (name, owner, repo, runbook URL, envs, tags) lives in: Option A (Git-owned `services.yaml` or `services/` directory), Option B (backend database), Option C (Argo CD Application labels/annotations only). Option A is recommended for homelab (low ops burden, auditable, no DB).
-- **Status:** TODO
+- **Status:** DONE (2026-03-13)
 - **Acceptance Criteria:**
   - ADR accepts Option A (Git-backed YAML manifest) with rationale.
   - Manifest schema defines required fields: name, owner_email, repo_url, envs[], tags.
@@ -2503,6 +2503,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Dependencies:** None
 - **Complexity:** S
 - **Risk:** Low
+- **Evidence:** [ADR-0008](../adr/0008-service-metadata-storage-model.md) written and accepted. Documents Option A (`workloads/services.yaml`) as the decision already in production use, with full rationale against Options B (database-only) and C (Argo CD annotations). Schema documented with current field set. Migration path to Option B (invert sync model, DB becomes write target) captured for future scale needs. Follow-up: enforce `services.yaml` schema validation in CI.
 
 #### T6.4.2 Implement service template generator (CLI + documentation)
 - **Description:** Create `scripts/scaffold-service.sh` (or Python equivalent) that:
