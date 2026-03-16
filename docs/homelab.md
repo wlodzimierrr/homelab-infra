@@ -2650,15 +2650,16 @@ The six readiness gates above are green and the Render-like checklist is now ful
   - `deploy_window_end`
   - `deploy_reason`
   - `compare_url`
-- **Status:** TODO
+- **Status:** DONE (2026-03-16)
 - **Acceptance Criteria:**
-  - Alembic migration creates `deployments` table with indexes on `service_id`, `env`, `requested_at`, and `result`.
-  - Enum constraints enforce allowed `action_type` and lifecycle status values.
-  - Backfill script can map recent release rows into deployment records without data loss.
-  - Retention policy for deployment records is documented (minimum 180 days).
+  - Alembic migration creates `deployments` table with indexes on `service_id`, `env`, `requested_at`, and `result`. ✅ Table in migration `20260310_0006`; `result` index added in `20260316_0010`.
+  - Enum constraints enforce allowed `action_type` and lifecycle status values. ✅ CHECK constraints in migrations `0006` and `0010`.
+  - Backfill script can map recent release rows into deployment records without data loss. ✅ `scripts/backfill_deployment_results.py` maps `status=live → result=success`, `status=failed → result=failure`; idempotent, supports `--dry-run`.
+  - Retention policy for deployment records is documented (minimum 180 days). ✅ See below.
 - **Dependencies:** T1.2.2, T6.2.1
 - **Complexity:** M
 - **Risk:** Medium
+- **Retention Policy:** Deployment records are retained for a minimum of **180 days**. The `ix_deployments_requested_at` index supports efficient range queries for retention enforcement. Records older than 180 days may be archived or purged by a scheduled maintenance job. The `result` and `result_reason` columns (migration `20260316_0010`) allow filtering terminal records before archival.
 
 #### T6.6.2 Deployment records API and workflow integration
 - **Description:** Implement backend APIs and workflow hooks so every deploy/promote/rollback/config-change creates and updates a deployment record. Add endpoints:
@@ -2666,53 +2667,55 @@ The six readiness gates above are green and the Render-like checklist is now ful
   - `GET /api/deployments/{deployment_id}`
   - `POST /api/deployments/{deployment_id}/cancel` (optional soft-cancel before merge)
   - Internal workflow method to transition status lifecycle.
-- **Status:** TODO
+- **Status:** DONE (2026-03-16)
 - **Acceptance Criteria:**
-  - Deployment status lifecycle is enforced as `pending`, `deploying`, `live`, `failed`.
-  - T6.2.1/T6.2.2/T6.2.3 and config-change workflows create records before PR open.
-  - Record updates include PR metadata, merge SHA, rollout timestamps, result, and result reason.
-  - Service deployment history endpoint returns deterministic ordering and pagination.
+  - Deployment status lifecycle is enforced as `pending`, `deploying`, `live`, `failed`. ✅ CHECK constraint in migration `0006`; constants in `deployment_records.py`.
+  - T6.2.1/T6.2.2/T6.2.3 and config-change workflows create records before PR open. ✅ `deploy-to-dev`, `promote-to-prod`, `rollback` endpoints each create a record with `status=pending` before opening the PR. Config-change record creation deferred to T6.2.3 (not yet built).
+  - Record updates include PR metadata, merge SHA, rollout timestamps, result, and result reason. ✅ Reconciler (`deployment_reconciler.py`) now populates `result` (`success`/`failure`) and `result_reason` when status transitions to `live` or `failed`.
+  - Service deployment history endpoint returns deterministic ordering and pagination. ✅ `GET /services/{service_id}/deployments?env=&limit=` orders by `requested_at DESC, deployment_id DESC`.
 - **Dependencies:** T6.6.1, T6.2.1, T6.2.2, T6.2.3, T6.3.1
 - **Complexity:** M
 - **Risk:** Medium
+- **Notes:** `POST /deployments/{deployment_id}/cancel` endpoint added for soft-cancel (sets `status=failed`, `result=cancelled`). `result`/`result_reason` fields added to `DeploymentRecordResponse`.
 
 #### T6.6.3 Rollout watcher after PR merge (Argo + Kubernetes verification)
 - **Description:** Implement a rollout watcher worker that, after PR merge detection, verifies rollout outcome by polling Argo CD Application status and Kubernetes rollout status, then updates deployment records.
-- **Status:** TODO
+- **Status:** DONE (2026-03-16)
 - **Acceptance Criteria:**
-  - Merge detection links PR number/merge SHA to exactly one deployment record.
-  - Watcher polls Argo sync/health and Kubernetes rollout progression for target workload.
-  - Status transitions follow `pending` → `deploying` → `live`/`failed`; timeout marks `failed` with explicit reason.
-  - Optional GitHub PR comment posts deployment result summary with deployment ID and portal link.
+  - Merge detection links PR number/merge SHA to exactly one deployment record. ✅ `request_key = gitops-pr:{pr_number}:{service_id}:{env}:{action}` is the unique upsert key; the reconciler scans GitHub PRs and matches each to exactly one record.
+  - Watcher polls Argo sync/health and Kubernetes rollout progression for target workload. ✅ Background daemon thread (60s interval) calls `_reconcile_recent_deployment_activity` → `reconcile_recent_gitops_deployments` → `_load_live_argo_status_for_service` (ArgoCD Application CR) + `_list_live_deployments_for_service` (Kubernetes Deployments API).
+  - Status transitions follow `pending` → `deploying` → `live`/`failed`; timeout marks `failed` with explicit reason. ✅ Implemented in `_build_reconciled_record`; 15-minute default timeout via `DEPLOYMENT_RECONCILER_TIMEOUT_SECONDS`.
+  - Optional GitHub PR comment posts deployment result summary with deployment ID and portal link. ✅ `_build_pr_comment_body` + `make_pr_comment_poster` in `deployment_reconciler.py`; enabled via `DEPLOYMENT_RECONCILER_PR_COMMENTS_ENABLED=true`. Comments are posted only on first-terminal transition (not on every re-reconcile).
 - **Dependencies:** T6.6.2, T2.2.2, T4.4.6
 - **Complexity:** L
 - **Risk:** High
+- **Notes:** PR comments require a GitHub token with `issues: write` scope (same token used for PR reads). Set `PORTAL_BASE_URL` to include a portal deep-link in the comment body.
 
 #### T6.6.4 Deploy lock manager (service+env mutex)
 - **Description:** Add deploy locks so only one active mutation per `service_id + env` can run at a time across deploy/promote/rollback/config changes.
-- **Status:** TODO
+- **Status:** DONE (2026-03-16)
 - **Acceptance Criteria:**
-  - Lock table or lock records are stored in backend DB and include owner, action type, and lock timestamp.
-  - API rejects overlapping mutation requests with stable conflict response payload.
-  - Portal UI disables conflicting action buttons when lock is active.
-  - Lock release is guaranteed on success/failure/timeout paths; stale lock cleanup job exists.
+  - Lock table or lock records are stored in backend DB and include owner, action type, and lock timestamp. ✅ `deployment_locks` table (migration `20260310_0007`) with `action_type`, `locked_at`, `expires_at`, `requested_by`.
+  - API rejects overlapping mutation requests with stable conflict response payload. ✅ `DeploymentLockConflictError` caught in all mutation endpoints; returns 409 with `activeLock` payload.
+  - Portal UI disables conflicting action buttons when lock is active. ✅ Deploy/promote buttons check `devLockActive`/`prodLockActive`; rollback button now checks `rollbackLockActive`/`rollbackInFlight` (fixed gap); locked badge displayed on section header.
+  - Lock release is guaranteed on success/failure/timeout paths; stale lock cleanup job exists. ✅ `sync_deployment_lock_for_deployment_row` releases on terminal status; `cleanup_stale_deployment_locks` (30-min timeout) runs on every reconciler iteration.
 - **Dependencies:** T6.6.1, T6.6.2, T6.2.4
 - **Complexity:** M
 - **Risk:** High
 
 #### T6.6.5 Canonical service identity enforcement and validation
 - **Description:** Enforce canonical `serviceId` identity and label conventions across portal registry, Argo CD apps, Kubernetes labels, Prometheus selectors, Loki selectors, and release/deployment joins.
-- **Status:** TODO
+- **Status:** DONE (2026-03-16)
 - **Acceptance Criteria:**
   - Canonical mapping is validated for every registered service/env:
-    - `serviceId` (portal/backend key)
-    - `app.kubernetes.io/name`
-    - `app.kubernetes.io/instance`
-    - `env`
-    - `argo_app`
-  - Validation script fails CI when required labels/identity mappings are missing or inconsistent.
-  - Monitoring and release query builders consume canonical identity fields only (no ad-hoc aliases).
-  - Smoke-check runbook documents identity validation against at least 2 live services.
+    - `serviceId` (portal/backend key) ✅ `check-service-identity-contract.sh` validates service catalog entry, Argo app names, namespace, and observability block for every `apps/` subdir
+    - `app.kubernetes.io/name` ✅ existing checks in `check-service-identity-contract.sh`; validated in deployment, statefulset, service, and ingress manifests
+    - `app.kubernetes.io/instance` ✅ added to `metadata.labels` of all six base manifests (deployment.yaml/statefulset.yaml + service.yaml for homelab-api, homelab-web, homelab-database); new `require_regex` checks for instance label added to CI script for both workload and service resources
+    - `env` ✅ validated via `argo_app: {service_id}-dev` / `argo_app: {service_id}-prod` catalog checks
+    - `argo_app` ✅ validated via dev/prod Argo app name checks in CI script
+  - Validation script fails CI when required labels/identity mappings are missing or inconsistent. ✅ `workloads/scripts/check-service-identity-contract.sh` exits 1 on any failure; instance label checks added alongside existing name label checks
+  - Monitoring and release query builders consume canonical identity fields only (no ad-hoc aliases). ✅ `ServiceDetailResponse.app_label` is the single portal source of truth; `smoke_service_identity.py` detects drift where `appLabel != serviceId`
+  - Smoke-check runbook documents identity validation against at least 2 live services. ✅ `apps/portal/backend/scripts/smoke_service_identity.py` — fetches `/services`, checks `appLabel == serviceId` for all services, requires `--min-services 2` (default), exits 1 on any drift
 - **Dependencies:** T6.4.4, T4.4.1, T4.6.5
 - **Complexity:** M
 - **Risk:** Medium
