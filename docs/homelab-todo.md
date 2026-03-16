@@ -366,6 +366,21 @@ Post-Level-3 feature expansion tickets. These do not block Level 3 entry; they e
 - **Risk:** Low
 - **Notes:** Temporary workaround: bypass OAuth2 proxy entirely and hit the API directly (see PORTAL-AUTH-2). Long-term fix is this ticket.
 
+### SCAFFOLD-NET-1 Scaffold: generated services reachable immediately after deploy
+
+- **Status:** TODO
+- **Description:** Services created via the scaffold wizard are not externally reachable until a manual overlay change is made. For HTTP services the dev overlay only generates a ClusterIP service with an Ingress, so Traefik handles routing — but for database (StatefulSet) services there is no LoadBalancer and no TCP Ingress, meaning the pod is unreachable from outside the cluster. Every scaffolded service should be reachable at its configured hostname on the expected port as soon as ArgoCD syncs, with no post-scaffold manual steps.
+- **Acceptance Criteria:**
+  - [ ] HTTP services (python-fastapi, static-nginx): confirm Traefik ingress is wired and reachable at the dev hostname immediately after ArgoCD sync — no action required today but validate end-to-end.
+  - [ ] Database services (postgres, mysql): scaffold generates a `patch-service-lb.yaml` in the prod overlay that patches the service type to `LoadBalancer`, so MetalLB assigns an external IP on first sync.
+  - [ ] DNS entry for the database hostname (`<name>.homelab.local`) is handled either by the existing wildcard DNS or by an explicit entry — document the expectation in the scaffold runbook.
+  - [ ] `pg_isready -h <name>.homelab.local` (postgres) or equivalent (mysql) succeeds within one ArgoCD sync cycle after the scaffold PR is merged.
+  - [ ] Add tests to `test_scaffold_service.py` asserting that database templates include `patch-service-lb.yaml` in the prod overlay files.
+- **Dependencies:** None
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** The LoadBalancer patch for `homelab-database` was added manually (commit `18f3b68`). This ticket is to bake it into the scaffold generator so future databases get it automatically.
+
 ### PORTAL-AUTH-2 Portal API authorization: Improve scope-based access control
 - **Status:** TODO
 - **Description:** The current `require_admin()` middleware treats all admin endpoints the same, requiring either admin user or admin group membership. As the portal grows, different endpoints will need different permission levels (e.g., scaffold operators vs. deployment admins vs. read-only viewers). This ticket introduces a more granular scope-based authorization model so that:
