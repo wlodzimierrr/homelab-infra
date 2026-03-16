@@ -321,7 +321,7 @@ Post-Level-3 feature expansion tickets. These do not block Level 3 entry; they e
 ---
 
 ### T6.4.7 Public hostname management — service card editor and wizard field
-- **Status:** TODO
+- **Status:** DONE
 - **Description:** Allow operators to view and update the public hostname for a service (e.g. `portal.wlodzimierrr.co.uk`) both when registering a new service via the wizard and from an existing service card in the portal. The hostname maps to the Ingress `host` field in the GitOps overlay and is the externally routable DNS name.
 
   **New service wizard (Step 3 — Configuration):**
