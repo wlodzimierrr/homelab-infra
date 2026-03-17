@@ -2752,72 +2752,79 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Description:** Add backend endpoint to aggregate telemetry scoped to a deployment window using existing Prometheus/Loki data:
   - `GET /api/deployments/{deployment_id}/observability`
   - Returns logs window links and metric deltas: error-rate before/after, latency before/after, restart spikes, availability impact.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:** Implemented as `GET /services/{service_id}/observability/window` (accepts `deploymentId`, `windowStart`/`windowEnd`, `logsPreset`, `logsLimit`). Returns metric deltas (error-rate, latency P95, availability before/after), health timeline segments, and Loki log lines. Missing telemetry handled gracefully with explicit `no_data`/`no_deployment_window` status codes. Query context included in every response. — `apps/portal/backend/app/main.py` (endpoint ~line 5932, builders ~lines 3928–4372).
 - **Acceptance Criteria:**
-  - Endpoint computes before/after windows from `deploy_window_start` and `deploy_window_end`.
-  - Uses only existing observability stack integrations (Prometheus, Loki, Grafana links).
-  - Missing telemetry returns explicit partial-data fields without failing full response.
-  - Response includes query context for reproducibility/debugging.
+  - ✅ Endpoint computes before/after windows from `deploy_window_start` and `deploy_window_end`.
+  - ✅ Uses only existing observability stack integrations (Prometheus, Loki, Grafana links).
+  - ✅ Missing telemetry returns explicit partial-data fields without failing full response.
+  - ✅ Response includes query context for reproducibility/debugging.
 - **Dependencies:** T6.6.2, T4.4.2, T4.4.8, T4.4.12
 - **Complexity:** M
 - **Risk:** Medium
 
 #### T6.7.2 Portal deploy history timeline (deploy records as first-class UX)
 - **Description:** Replace mocked/adapter-only deployment history with deployment-record-backed timeline on `/services/:serviceId/deployments` and service overview preview.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:** Full timeline page at `apps/portal/frontend/src/pages/service-deployments-page.tsx`. Rows sourced from deployment records API. Each row shows action type, lifecycle status, requested-by/at, PR link, merge SHA, previous→new version, deploy reason, compare link, Argo sync/health status. Drill-down opens deploy-scoped logs/metrics panel. Filtering by action, status, impact; sorting by newest or worst impact. — `apps/portal/frontend/src/lib/adapters/deployments.ts`, backend endpoint ~line 5844 in `main.py`.
 - **Acceptance Criteria:**
-  - Timeline rows are sourced from deployment records API (not mock rows).
-  - Each row shows action type, status, requested by/at, PR link, merge SHA, previous→new version, deploy reason, and compare link.
-  - Row drill-down opens deploy-scoped logs/metrics panel for that deployment.
-  - UI highlights failed deployments and supports filtering by result/action/env.
+  - ✅ Timeline rows are sourced from deployment records API (not mock rows).
+  - ✅ Each row shows action type, status, requested by/at, PR link, merge SHA, previous→new version, deploy reason, and compare link.
+  - ✅ Row drill-down opens deploy-scoped logs/metrics panel for that deployment.
+  - ✅ UI highlights failed deployments and supports filtering by result/action/env.
 - **Dependencies:** T6.6.2, T6.2.4, T1.6.4, T4.5.2
 - **Complexity:** M
 - **Risk:** Medium
 
 #### T6.7.3 Deploy impact summary and regression highlighting
 - **Description:** Extend deployment history and service detail to show deploy impact summaries (error-rate delta, latency delta, restart spikes, availability impact) and emphasize regressions immediately after deploy.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:** Before/after metric snapshots (error-rate delta, P95 latency delta, availability delta) on deployment rows. Regression badge (`High regression` / `Regression` / `Stable/Improved` / `No comparison samples`) per row in the deployments timeline. Service overview now shows a compact per-env "Recent Deploy Impact" row with outcome badge, impact badge, and signed deltas (err / p95 / avail) highlighted in red when negative — `service-details-page.tsx`. Services list shows a level-aware `Deploy: warning` / `Deploy: critical` badge (rose for critical, amber for warning) replacing the old generic degraded indicator — `services-page.tsx`. Thresholds documented with a table in `docs/runbooks/unhealthy-deployment-highlighting.md` §2a including adjustment procedure. Monitoring links deep-link to Grafana/Loki.
 - **Acceptance Criteria:**
-  - Deploy rows include before/after indicators with explicit unavailable state when telemetry windows are missing.
-  - Services list/detail highlight recent deployments with negative deltas using shared severity semantics.
-  - Regression thresholds are configurable and documented in runbook.
-  - Existing monitoring links still deep-link to Grafana/Loki for full investigation.
+  - ✅ Deploy rows include before/after indicators with explicit unavailable state when telemetry windows are missing.
+  - ✅ Services list/detail highlight recent deployments with negative deltas using shared severity semantics.
+  - ✅ Regression thresholds are configurable and documented in runbook.
+  - ✅ Existing monitoring links still deep-link to Grafana/Loki for full investigation.
 - **Dependencies:** T6.7.1, T4.3.7, T4.3.8
 - **Complexity:** M
 - **Risk:** Medium
 
 #### T6.7.4 Historical deployment backfill from Argo/Git/GitHub evidence
 - **Description:** Build a one-time and repeatable backfill path that reconstructs older deployment records from trusted deployment evidence sources instead of pretending image/package history equals deployment history. Candidate inputs include Argo CD application history, Git promotion PRs/merge commits, rollout annotations, and explicit deployment metadata already emitted by CI.
-- **Status:** TODO
+- **Status:** DONE
 - **Acceptance Criteria:**
-  - Backfill process can create historical deployment records for existing services where deploy evidence exists.
-  - Each reconstructed record stores provenance and confidence (`source=argo_history`, `source=git_pr`, `source=rollout_annotation`, etc.).
-  - Package/image versions with no deployment evidence are not shown as deployed history rows.
-  - Backfill output is idempotent and safe to rerun without duplicating deployment records.
+  - ✅ Backfill process can create historical deployment records for existing services where deploy evidence exists.
+  - ✅ Each reconstructed record stores provenance and confidence (`source=argo_history`, `source=git_pr`, `source=rollout_annotation`, etc.).
+  - ✅ Package/image versions with no deployment evidence are not shown as deployed history rows.
+  - ✅ Backfill output is idempotent and safe to rerun without duplicating deployment records.
+- **Evidence:** `apps/portal/backend/scripts/backfill_historical_deployments.py` — implements two evidence sources (`git_pr` via paginated GitHub PR history; `argo_history` via Argo CD `status.history[]`). Uses same `request_key` format as live reconciler (`gitops-pr:<pr>:<service>:<env>:<action>`) for git_pr records, `backfill:argo-history:<app>:<history_id>` for Argo records. Provenance stored in `metadata.source`, `metadata.confidence` (`medium` for merged PRs, `high` for failed PRs and Argo history), `metadata.backfilled=True`. CLI: `--dry-run`, `--service`, `--source git_pr|argo_history|all`, `--max-pages`.
 - **Dependencies:** T6.6.1, T6.6.2, T6.6.3, T6.2.5
 - **Complexity:** L
 - **Risk:** High
 
 #### T6.7.5 Separate build/package history from deployment history
 - **Description:** Add a clear product boundary between "published builds/images" and "actual deployments" so the portal can show both without conflating them. Build/package history may come from GitHub Packages/GHCR or workflow artifacts, but deployment history must remain tied to deployment records only.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:** Deployment records are the canonical source for the deployments timeline — undeployed package versions are never rendered as deployment rows. `imageRef`/`previousImage`/`targetImage` stored separately from deployment action on records. `apps/portal/backend/app/release_traceability.py` provides build/CI metadata as a distinct fallback source. `DeploymentHistoryItem.evidenceSource` field added (`deployment_record` | `release_traceability`) in `apps/portal/frontend/src/lib/adapters/deployments.ts`. `EvidenceBadge` component added to `apps/portal/frontend/src/pages/service-deployments-page.tsx` — renders `Deployed` (emerald) for tracked DB records, `Published` (sky) for release-traceability fallback rows with data, and `Unknown deployment evidence` (muted) when no deploy evidence exists. Backfilled records additionally show `Deployed · Backfilled`.
 - **Acceptance Criteria:**
-  - UI and API expose build/package history separately from deployment history.
-  - Deployment timeline never renders undeployed package versions as if they were live rollouts.
-  - Services/release views can link a deployment record to its source image/build when both exist.
-  - Copy and badges make the distinction explicit (`Published`, `Deployed`, `Unknown deployment evidence`).
+  - ✅ UI and API expose build/package history separately from deployment history.
+  - ✅ Deployment timeline never renders undeployed package versions as if they were live rollouts.
+  - ✅ Services/release views can link a deployment record to its source image/build when both exist.
+  - ✅ Copy and badges make the distinction explicit (`Published`, `Deployed`, `Unknown deployment evidence`).
 - **Dependencies:** T6.2.5, T6.6.2, T6.7.2
 - **Complexity:** M
 - **Risk:** Medium
 
 #### T6.7.6 Durable deployment observability snapshots beyond Prometheus retention
 - **Description:** Persist post-deploy observability snapshots (or compact rollups) onto deployment records at deploy time so older rows remain useful after Prometheus/Loki retention windows expire.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:** `deploy_window_start`/`deploy_window_end` stored on deployment records. Snapshots are now lazily persisted: the first time a terminal deployment (`live`/`failed`) is served with live Prometheus data, `_persist_observability_snapshot_safe()` in `main.py` calls `store_observability_snapshot()` in `deployment_records.py` to write `metadata.observabilitySnapshot` via `jsonb_set` (idempotent — only writes when key is absent). Subsequent requests fall back to the stored snapshot when Prometheus returns no data (`metricsSource: 'stored_snapshot'`). `metricsSource` field added to `DeploymentRecordResponse` (`live_query | stored_snapshot | none`). Frontend reads `metricsSource` on `DeploymentHistoryItem` and renders `MetricsSourceBadge` in the deployment table: `Stored snapshot` (indigo) or `No retained snapshot` (muted) to distinguish the two missing-data cases.
 - **Acceptance Criteria:**
-  - Deployment records retain summarized before/after observability fields even after raw telemetry ages out.
-  - Historical deployment rows can show meaningful impact summaries without live re-query of expired windows.
-  - UI distinguishes `no retained telemetry captured at deploy time` from `query failed now`.
-  - Snapshot retention, storage size, and recomputation policy are documented.
+  - ✅ Deployment records retain summarized before/after observability fields even after raw telemetry ages out.
+  - ✅ Historical deployment rows can show meaningful impact summaries without live re-query of expired windows.
+  - ✅ UI distinguishes `no retained telemetry captured at deploy time` from `query failed now`.
+  - ✅ Snapshot retention, storage size, and recomputation policy are documented.
+- **Snapshot policy:** Snapshots are stored in `metadata.observabilitySnapshot` as JSONB (three keys: `errorRatePct`, `p95LatencyMs`, `availabilityPct`, each with `before`/`after`/`delta` floats). Storage cost: ~200–400 bytes per deployment record. Snapshots are written once (lazy, on first read with live Prometheus data) and never overwritten. To recompute: delete the `observabilitySnapshot` key from `metadata` directly in the DB and the next request will re-capture from Prometheus (if still within retention). No scheduled archival — capture happens opportunistically during normal API requests.
 - **Dependencies:** T6.6.2, T6.6.3, T6.7.1
 - **Complexity:** M
 - **Risk:** Medium

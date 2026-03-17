@@ -24,6 +24,32 @@ Default rule inputs include:
 - p95 latency delta
 - availability delta (drop)
 
+## 2a. Regression thresholds (current defaults)
+
+All thresholds live in `DEFAULT_DEPLOYMENT_ALERT_THRESHOLDS` in
+`apps/portal/frontend/src/lib/deployment-alerts.ts`.
+
+| Metric | Warning | Critical | Notes |
+|---|---|---|---|
+| Regression score | ≥ 0.8 | ≥ 1.5 | Composite score; critical means multiple signals fired simultaneously |
+| Error-rate delta | ≥ 0.4 pp | ≥ 1.0 pp | Percentage-point change vs pre-deploy window |
+| P95 latency delta | ≥ 80 ms | ≥ 180 ms | Absolute ms increase vs pre-deploy window |
+| Availability drop | ≥ 0.12 pp | ≥ 0.3 pp | Positive value = drop (availability delta is negated before comparing) |
+| Suspicious outcomes | — | `failed`, `degraded`, `error` | Outcome string match; immediately triggers critical |
+
+Alert levels per deployment:
+- **none** — all thresholds below warning; outcome is normal
+- **warning** — at least one metric exceeded the warning threshold
+- **critical** — at least one metric exceeded the critical threshold, or outcome is suspicious
+
+Alert propagation:
+- Deployment history timeline: `ImpactBadge` per row; filter by `Regressions only` or `Missing samples`
+- Service detail overview: compact per-env impact row (outcome + badge + deltas); suspicious banner if any recent deployment triggered an alert
+- Services list: `Deploy: warning` or `Deploy: critical` badge per service row (based on last 3 deployments)
+- Platform health dashboard: `summarizeDeploymentAlerts` aggregates across all services
+
+**To adjust thresholds:** edit the `DEFAULT_DEPLOYMENT_ALERT_THRESHOLDS` constant directly and rebuild the frontend. Thresholds are frontend-only and do not require a backend change. Restart or redeploy `homelab-web` after the build to apply.
+
 ## 3. Validation steps
 
 1. Open `/services/homelab-api/deployments` and verify suspicious rows are highlighted by `Observability` badges.
