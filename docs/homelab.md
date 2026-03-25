@@ -2118,6 +2118,48 @@ monitoring readiness so the dashboard reflects real operational state.
 - **Notes:**
   - The generator creates prod overlays and a prod `Application` manifest file, but does not auto-enable `environments/prod/workloads/kustomization.yaml` while single-cluster safety mode remains active.
 
+#### Design note: project-first namespace ownership for multi-service apps
+- **Recommendation:** For apps that naturally contain a frontend + backend pair, the namespace should be created and owned when the project is created, not retrofitted after the services are already deployed.
+- **Why:** Namespace ownership affects ingress, service discovery, network policy, secrets/config scope, Argo app layout, and portal catalog identity. Getting that wrong up front creates migration work later.
+- **Implication:** The happy path should be `create project -> create namespace -> add one or more services into that namespace`. A later `add service to existing project` flow is good. A `merge two already-deployed standalone services into one namespace` flow should exist only as an explicit migration path.
+
+#### T5.2.2 Define project-first namespace contract for self-service bootstrap
+- **Description:** Introduce an explicit project-level contract where a project owns the namespace for each environment, and one project can contain multiple services such as `frontend`, `backend`, `worker`, or `cron` in that same namespace.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Project contract is documented with canonical fields at minimum: `projectId`, `projectName`, `env`, `namespace`, `serviceIds`, `publicHost?`, `owner`, and `repoUrl`.
+  - Namespace naming is project-owned rather than service-owned for new project creation flows.
+  - Backend project registry and service registry contracts explicitly support one project to many services in the same namespace.
+  - Catalog reconciliation and service identity docs are updated to describe project-to-service one-to-many joins as first-class, not exceptional.
+- **Dependencies:** T4.6.1, T4.6.9, T5.2.1
+- **Complexity:** L
+- **Risk:** High
+
+#### T5.2.3 Extend scaffold generator with a project bundle topology (frontend + backend in one namespace)
+- **Description:** Add a scaffold mode for a web-app project bundle that generates a project with two services by default: frontend and backend, sharing one namespace per environment and one project-level catalog entry.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Scaffold input supports a project topology such as `single-service`, `frontend-backend`, or `frontend-backend-db`.
+  - Generated output creates one project namespace and multiple service manifests inside it without name collisions.
+  - Generated overlays render successfully with `kustomize build` for dev and prod.
+  - A throwaway generated project bundle can be deployed successfully with both frontend and backend running in the same namespace.
+  - Shared namespace guardrails are generated: network policy, ingress/service naming, config/secret conventions, and per-service labels remain unambiguous.
+- **Dependencies:** T5.2.2
+- **Complexity:** XL
+- **Risk:** High
+
+#### T5.2.4 Add scaffold support for "add service to existing project"
+- **Description:** Support a second self-service path that adds a new service into an existing project namespace instead of creating a fresh namespace every time.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Scaffold input can target an existing `projectId + env`.
+  - New service generation reuses the existing namespace and project metadata instead of creating a duplicate project or namespace.
+  - Validation blocks duplicate `serviceId`, conflicting public hosts, conflicting ingress paths, and conflicting default service ports.
+  - Generated catalog metadata updates the parent project and adds the new child service deterministically.
+- **Dependencies:** T5.2.2, T5.2.3
+- **Complexity:** L
+- **Risk:** High
+
 ### E5.3 Internal developer portal seed
 
 #### T5.3.1 Publish a lightweight service catalog page
@@ -2154,6 +2196,42 @@ monitoring readiness so the dashboard reflects real operational state.
     - `workloads/README.md`
 - **Notes:**
   - In the current single-cluster safety mode, `prod` is intentionally shown as GitOps-only intent: it exists in Git, promotion metadata, and the portal catalog, but does not correspond to separate live `*-prod` workloads in the cluster until prod workloads are explicitly enabled later.
+
+#### T5.3.2 Refactor the portal new-service UX into a project-first creation flow
+- **Description:** Replace the current service-centric scaffold UX with a project-centric flow that lets the operator choose between `new single-service project`, `new frontend + backend project`, and `add service to existing project`.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - The first step in the UI asks whether the operator is creating a new project or adding a service to an existing project.
+  - The `frontend + backend` option clearly shows that both services will share one namespace.
+  - The preview step shows the namespace, child services, ingress/public-host assumptions, and GitOps files that will be created or updated.
+  - The flow prevents accidental creation of duplicate project namespaces for the same project/env.
+- **Dependencies:** T5.2.2, T5.2.3, T5.2.4
+- **Complexity:** L
+- **Risk:** Medium
+
+#### T5.3.3 Update portal catalog and service views for project-first grouping
+- **Description:** Refactor the portal information architecture so projects are first-class containers that can show multiple services, while deployments and observability remain service-scoped.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Projects page renders child services for each project and clearly shows shared namespace ownership.
+  - Services page can filter or group by parent project.
+  - Service detail page links back to the owning project and shows sibling services when they share the same project namespace.
+  - Backend/frontend contracts remain explicit: project-level data does not replace service-level deployment and observability records.
+- **Dependencies:** T5.2.2, T4.6.9, T5.3.2
+- **Complexity:** L
+- **Risk:** Medium
+
+#### T5.3.4 Add an adoption or migration path for already-deployed standalone services
+- **Description:** After the project-first path is working, add an operator-guided migration path for cases where a frontend and backend were originally created as separate standalone services and should later become one shared-namespace project.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - A runbook documents the safe migration path, expected downtime, naming changes, and rollback plan.
+  - The portal/backend can link existing standalone services to a parent project before any namespace move happens.
+  - Namespace consolidation is treated as an explicit migration action, not something the normal create flow silently does.
+  - Validation covers ingress conflicts, secret/config scope changes, and service discovery changes before migration is applied.
+- **Dependencies:** T5.2.4, T5.3.3
+- **Complexity:** XL
+- **Risk:** High
 
 ---
 
@@ -2223,6 +2301,7 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - E6.5 Multi-user access control and audit (optional later)
 - E6.6 Deployment records, rollout verification, and deploy safety controls
 - E6.7 Deploy-scoped observability and deploy timeline UX
+- E6.8 Multi-framework scaffold templates and database portal visibility
 
 ---
 
@@ -2828,6 +2907,207 @@ The six readiness gates above are green and the Render-like checklist is now ful
 - **Dependencies:** T6.6.2, T6.6.3, T6.7.1
 - **Complexity:** M
 - **Risk:** Medium
+
+---
+
+### E6.8 Multi-framework scaffold templates and database portal visibility
+
+#### T6.8.1 Scaffold template: Django backend (`python-django`)
+- **Description:** Add a `python-django` template to the scaffold generator and portal wizard. Django apps typically run behind Gunicorn/Uvicorn on port 8000, use a trailing-slash health endpoint convention, and are structurally similar to the existing `python-fastapi` template.
+  - Container port: 8000, service port: 80.
+  - Health/readiness path: `/health/` (trailing slash to match Django's `APPEND_SLASH` default).
+  - Container name: `app`.
+  - Observability mode: `app-native` (assumes `/metrics` via `django-prometheus` or similar middleware).
+  - Generated repo stub: `Dockerfile` (python + gunicorn), `requirements.txt` placeholder, minimal Django project skeleton, CI workflow.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template python-django` generates the full manifest set; `kustomize build` succeeds for both overlays.
+  - Portal wizard shows `Django` as a template option in Step 2 with appropriate description.
+  - Smoke test extended with a `python-django` variant.
+  - Catalog entry uses `mode: app-native`.
+  - Generated repo stub includes a working `Dockerfile` and health endpoint.
+- **Dependencies:** T6.4.2, T6.4.3
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** Reuse the `python-fastapi` manifest generation path — only the health path, container defaults, and repo stub differ. Database add-on (T6.4.5) applies unchanged.
+
+#### T6.8.2 Scaffold template: Flask backend (`python-flask`)
+- **Description:** Add a `python-flask` template. Flask apps typically run behind Gunicorn on port 5000, with a simple `/health` endpoint.
+  - Container port: 5000, service port: 80.
+  - Health/readiness path: `/health`.
+  - Container name: `app`.
+  - Observability mode: `app-native` (assumes `/metrics` via `prometheus-flask-instrumentator` or similar).
+  - Generated repo stub: `Dockerfile` (python + gunicorn), `requirements.txt` placeholder, minimal Flask app skeleton, CI workflow.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template python-flask` generates the full manifest set; `kustomize build` succeeds for both overlays.
+  - Portal wizard shows `Flask` as a template option in Step 2.
+  - Smoke test extended with a `python-flask` variant.
+  - Catalog entry uses `mode: app-native`.
+  - Generated repo stub includes a working `Dockerfile` and health endpoint.
+- **Dependencies:** T6.4.2, T6.4.3
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** Structurally identical to `python-fastapi` except port 5000 and Gunicorn-only (no Uvicorn). Database add-on applies unchanged.
+
+#### T6.8.3 Scaffold template: Express.js backend (`node-express`)
+- **Description:** Add a `node-express` template. Express apps run on Node.js, typically on port 3000, with a `/health` endpoint.
+  - Container port: 3000, service port: 80.
+  - Health/readiness path: `/health`.
+  - Container name: `app`.
+  - Observability mode: `app-native` (assumes `/metrics` via `prom-client` or similar).
+  - Generated repo stub: `Dockerfile` (node + npm), `package.json` placeholder, minimal Express server skeleton, CI workflow.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template node-express` generates the full manifest set; `kustomize build` succeeds for both overlays.
+  - Portal wizard shows `Express.js` as a template option in Step 2.
+  - Smoke test extended with a `node-express` variant.
+  - Catalog entry uses `mode: app-native`.
+  - Generated repo stub includes a working `Dockerfile` and health endpoint.
+- **Dependencies:** T6.4.2, T6.4.3
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** First Node.js-based template. The Dockerfile differs significantly from Python templates (multi-stage build with `node:20-alpine`). Database add-on applies unchanged.
+
+#### T6.8.4 Scaffold template: NestJS backend (`node-nestjs`)
+- **Description:** Add a `node-nestjs` template. NestJS apps run on Node.js (port 3000) with a built-in health module and structured project layout.
+  - Container port: 3000, service port: 80.
+  - Health/readiness path: `/health`.
+  - Container name: `app`.
+  - Observability mode: `app-native` (assumes `/metrics` via `@willsoto/nestjs-prometheus` or similar).
+  - Generated repo stub: `Dockerfile` (node + npm), `package.json` placeholder, minimal NestJS project skeleton with health module, CI workflow.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template node-nestjs` generates the full manifest set; `kustomize build` succeeds for both overlays.
+  - Portal wizard shows `NestJS` as a template option in Step 2.
+  - Smoke test extended with a `node-nestjs` variant.
+  - Catalog entry uses `mode: app-native`.
+  - Generated repo stub includes a working `Dockerfile`, health module, and health endpoint.
+- **Dependencies:** T6.4.2, T6.4.3
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** Shares the Node.js Dockerfile pattern with `node-express`. NestJS has TypeScript compilation, so the Dockerfile includes a build step (`npm run build`).
+
+#### T6.8.5 Scaffold template: React frontend (`react`)
+- **Description:** Add a `react` template for React SPA applications. React apps are built to static assets and served by nginx, making this structurally similar to `static-nginx` but with React-specific repo scaffolding.
+  - Container port: 80, service port: 80.
+  - Health/readiness path: `/`.
+  - Container name: `web`.
+  - Observability mode: `ingress-derived` (no backend `/metrics` — static assets served by nginx).
+  - Generated repo stub: `Dockerfile` (multi-stage: `node:20-alpine` build + `nginx:alpine` serve), `package.json` with React/Vite placeholder, minimal `src/App.tsx` skeleton, nginx config, CI workflow.
+  - No `ServiceMonitor` generated.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template react` generates the full manifest set; `kustomize build` succeeds for both overlays.
+  - Portal wizard shows `React` as a template option in Step 2.
+  - Smoke test extended with a `react` variant.
+  - Catalog entry uses `mode: ingress-derived`.
+  - Generated Dockerfile includes multi-stage build (Node build → nginx serve).
+- **Dependencies:** T6.4.2, T6.4.3
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** Reuses `static-nginx` manifest generation path. The difference is the repo stub (React project vs. plain static site). Consider Vite as the default bundler for the skeleton.
+
+#### T6.8.6 Scaffold template: Next.js frontend (`nextjs`)
+- **Description:** Add a `nextjs` template for Next.js applications. Unlike React/Vue SPAs, Next.js runs a Node.js server for SSR/ISR, so it requires a runtime container rather than nginx.
+  - Container port: 3000, service port: 80.
+  - Health/readiness path: `/api/health`.
+  - Container name: `web`.
+  - Observability mode: `app-native` (Node.js runtime can expose `/metrics` via custom API route).
+  - Generated repo stub: `Dockerfile` (multi-stage: `node:20-alpine` build + `node:20-alpine` serve with `next start`), `package.json` with Next.js placeholder, minimal `pages/` or `app/` skeleton with health API route, CI workflow.
+  - `ServiceMonitor` generated (app-native mode).
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template nextjs` generates the full manifest set; `kustomize build` succeeds for both overlays.
+  - Portal wizard shows `Next.js` as a template option in Step 2.
+  - Smoke test extended with a `nextjs` variant.
+  - Catalog entry uses `mode: app-native`.
+  - Generated repo stub includes a health API route and working `Dockerfile`.
+- **Dependencies:** T6.4.2, T6.4.3
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** Next.js is the only frontend template that uses `app-native` observability because it has a Node.js runtime. The Dockerfile uses `next start` in production mode, not `next dev`.
+
+#### T6.8.7 Scaffold template: Vue frontend (`vue`)
+- **Description:** Add a `vue` template for Vue.js SPA applications. Like React, Vue apps are built to static assets and served by nginx.
+  - Container port: 80, service port: 80.
+  - Health/readiness path: `/`.
+  - Container name: `web`.
+  - Observability mode: `ingress-derived`.
+  - Generated repo stub: `Dockerfile` (multi-stage: `node:20-alpine` build + `nginx:alpine` serve), `package.json` with Vue/Vite placeholder, minimal `src/App.vue` skeleton, nginx config, CI workflow.
+  - No `ServiceMonitor` generated.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template vue` generates the full manifest set; `kustomize build` succeeds for both overlays.
+  - Portal wizard shows `Vue` as a template option in Step 2.
+  - Smoke test extended with a `vue` variant.
+  - Catalog entry uses `mode: ingress-derived`.
+  - Generated Dockerfile includes multi-stage build (Node build → nginx serve).
+- **Dependencies:** T6.4.2, T6.4.3
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** Identical to `react` in manifest generation. Only the repo stub differs (Vue project structure, `App.vue` instead of `App.tsx`).
+
+#### T6.8.8 Scaffold template: WordPress (`wordpress`)
+- **Description:** Add a `wordpress` template to the scaffold generator and portal wizard. WordPress uses a pre-built image (no custom Dockerfile or CI workflow), so the scaffold output differs from application templates.
+  - Container port: 80, service port: 80.
+  - Health/readiness path: `/wp-login.php`.
+  - Container name: `web`.
+  - Observability mode: `ingress-derived` (no `/metrics` endpoint).
+  - No application repo scaffold and no CI workflow — the wizard skips or pre-fills the image-repo field with `wordpress:latest` or a pinned tag.
+  - Mandatory MySQL database add-on: MySQL StatefulSet + Service + NetworkPolicy + SOPS-encrypted Secret stub for `WORDPRESS_DB_PASSWORD` / `MYSQL_ROOT_PASSWORD`.
+  - `PersistentVolumeClaim` for `/var/www/html/wp-content` (uploaded media and plugins).
+  - `WORDPRESS_DB_*` env vars sourced from the database Secret.
+  - No `ServiceMonitor` generated.
+  - Prod overlay: same single-cluster safety-mode comment as other templates.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - `scaffold-service.py --template wordpress` generates the full manifest set; `kustomize build` succeeds for both overlays.
+  - Portal wizard shows `WordPress` as a template option in Step 2; image-repo field is hidden or pre-filled.
+  - Smoke test extended with a WordPress variant checking file count.
+  - Catalog entry uses `mode: ingress-derived`.
+  - Guardrails still catch any unencrypted `Secret` kind in the generated output.
+  - MySQL add-on is automatically included — no separate database add-on toggle needed.
+- **Dependencies:** T6.4.2, T6.4.3, T6.4.5 (MySQL add-on manifests)
+- **Complexity:** M
+- **Risk:** Low
+- **Notes:** Supersedes T6.4.6 in `homelab-todo.md`. WordPress upgrades and plugin management are out of scope — the generated manifests are a starting point. Document SOPS secret rotation steps alongside the generated README.
+
+#### T6.8.9 Database services: portal visibility and health indicators
+- **Description:** Standalone database services (`postgres`, `mysql`) scaffolded via the wizard currently use `observability.mode: ingress-derived`, which is misleading since databases do not serve HTTP traffic. This ticket changes database observability to `no-http` and adds database-specific health indicators in the portal services tab.
+  - Update scaffold generator: set `default_observability_mode: "no-http"` for `postgres` and `mysql` templates.
+  - Update existing `services.yaml` entries: any standalone database services should use `mode: no-http`.
+  - Portal services tab: for `no-http` services, show pod status (running/pending/failed), restart count, PVC usage, and connection readiness instead of HTTP metrics (latency, error rate, availability).
+  - Service detail page: replace HTTP metrics cards with database-appropriate health indicators — pod health, StatefulSet ready replicas, and a connection probe result if available.
+  - Ensure database services are first-class entries in the services list — same service card layout, same search/filter, same deployment history if applicable.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Scaffold generator sets `mode: no-http` for `postgres` and `mysql` templates.
+  - Portal services list renders database services with pod-status health indicator instead of HTTP-based health.
+  - Service detail page for a database service shows pod health, restart count, and StatefulSet replica status.
+  - No HTTP metrics cards (latency, error rate, availability) shown for `no-http` services.
+  - `validate-services-catalog.py` accepts `no-http` mode.
+  - At least one database service visible in the portal with correct health indicators after scaffolding.
+- **Dependencies:** T6.4.2, T6.4.3, T6.4.5
+- **Complexity:** M
+- **Risk:** Low
+- **Notes:** The `no-http` mode already exists in the observability contract (`docs/contracts/service-observability.md`) and is used by `oauth2-proxy`. This ticket extends it with richer database-specific indicators beyond just "unsupported HTTP metrics".
+
+#### T6.8.10 Portal wizard: template category grouping and descriptions
+- **Description:** With 12 templates available (4 backend, 4 frontend, 2 database, 1 WordPress, 1 static-nginx), the wizard Step 2 template selection needs visual organization. Group templates into categories with descriptive labels so operators can quickly find the right template.
+  - Categories: **Backend** (FastAPI, Django, Flask, Express.js, NestJS), **Frontend** (React, Next.js, Vue, Static Nginx), **CMS** (WordPress), **Database** (PostgreSQL, MySQL).
+  - Each template card shows: name, one-line description, language/runtime icon or label, default port, observability mode badge.
+  - Search/filter within the template list for larger template counts.
+- **Status:** TODO
+- **Acceptance Criteria:**
+  - Wizard Step 2 displays templates grouped by category with clear section headers.
+  - Each template card includes name, description, and key defaults (port, observability mode).
+  - Template selection still works the same way (click to select, next to proceed).
+  - Frontend build passes with all template options rendered.
+- **Dependencies:** T6.8.1–T6.8.8 (all templates exist before grouping makes sense)
+- **Complexity:** S
+- **Risk:** Low
+- **Notes:** This is a UX polish ticket — functional scaffolding works without it. Sequence after at least half the templates are implemented.
 
 ---
 
