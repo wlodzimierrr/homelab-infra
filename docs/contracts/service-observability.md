@@ -97,6 +97,7 @@ Example:
 ```yaml
 services:
   - service_id: oauth2-proxy
+    project_id: homelab-web
     name: OAuth2 Proxy
     observability:
       mode: no-http
@@ -107,6 +108,8 @@ services:
         argo_app: homelab-web-dev
         workload_ref: apps/homelab-web/envs/dev/oauth2-proxy.yaml
 ```
+
+The optional `project_id` field declares that this support service belongs to the `homelab-web` project. See `docs/contracts/project-identity.md` for project grouping semantics.
 
 ## Runtime expectations
 

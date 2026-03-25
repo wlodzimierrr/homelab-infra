@@ -2125,7 +2125,7 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T5.2.2 Define project-first namespace contract for self-service bootstrap
 - **Description:** Introduce an explicit project-level contract where a project owns the namespace for each environment, and one project can contain multiple services such as `frontend`, `backend`, `worker`, or `cron` in that same namespace.
-- **Status:** TODO
+- **Status:** DONE (2026-03-25)
 - **Acceptance Criteria:**
   - Project contract is documented with canonical fields at minimum: `projectId`, `projectName`, `env`, `namespace`, `serviceIds`, `publicHost?`, `owner`, and `repoUrl`.
   - Namespace naming is project-owned rather than service-owned for new project creation flows.
@@ -2134,6 +2134,23 @@ monitoring readiness so the dashboard reflects real operational state.
 - **Dependencies:** T4.6.1, T4.6.9, T5.2.1
 - **Complexity:** L
 - **Risk:** High
+- **Evidence:**
+  - Project identity contract documented:
+    - `docs/contracts/project-identity.md` — defines `ProjectIdentity` interface, field semantics, Git declaration, DB representation, catalog reconciliation strategy, and backward compatibility
+  - `project_id` field added to `services.yaml` schema with `oauth2-proxy → homelab-web` as first real example:
+    - `workloads/services.yaml`
+  - Database schema extended with nullable `project_id` column on `service_registry`:
+    - `apps/portal/backend/alembic/versions/20260325_0011_add_service_registry_project_id.py`
+  - Backend propagation: `project_id` parsed from catalog metadata, stamped onto service_registry rows during gitops sync, and included in catalog reconciliation joins:
+    - `apps/portal/backend/app/gitops_project_sync.py` — `ServiceCatalogMetadata.project_id` + `_stamp_project_ids_on_service_registry()`
+    - `apps/portal/backend/app/service_registry_sync.py` — `ServiceRegistryRecord.project_id` + COALESCE upsert
+    - `apps/portal/backend/app/catalog_reconciliation.py` — `explicit_project_id` join strategy (highest priority)
+    - `apps/portal/backend/app/main.py` — `project_id` in `_load_service_rows` SELECT
+  - Catalog validator accepts `project_id` as optional kebab-case field:
+    - `workloads/scripts/validate-services-catalog.py`
+  - Existing contract docs updated with project cross-references:
+    - `docs/contracts/service-identity.md`
+    - `docs/contracts/service-observability.md`
 
 #### T5.2.3 Extend scaffold generator with a project bundle topology (frontend + backend in one namespace)
 - **Description:** Add a scaffold mode for a web-app project bundle that generates a project with two services by default: frontend and backend, sharing one namespace per environment and one project-level catalog entry.

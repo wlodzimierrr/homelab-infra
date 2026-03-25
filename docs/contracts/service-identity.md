@@ -62,6 +62,10 @@ interface ServiceIdentity {
 }
 ```
 
+## Relationship to ProjectIdentity
+
+Each service belongs to exactly one project. The project is declared via an optional `project_id` field in `services.yaml`. When `project_id` is omitted, it defaults to `service_id` (single-service project). See `docs/contracts/project-identity.md` for full details.
+
 ## Implemented references
 
 - `apps/portal/frontend/src/lib/service-identity.ts`
@@ -70,3 +74,4 @@ interface ServiceIdentity {
 - `apps/portal/frontend/src/lib/adapters/service-metrics.ts`
 - `apps/portal/frontend/src/lib/adapters/service-health-timeline.ts`
 - `apps/portal/frontend/src/lib/adapters/platform-health.ts`
+- `docs/contracts/project-identity.md`
