@@ -2154,7 +2154,14 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T5.2.3 Extend scaffold generator with a project bundle topology (frontend + backend in one namespace)
 - **Description:** Add a scaffold mode for a web-app project bundle that generates a project with two services by default: frontend and backend, sharing one namespace per environment and one project-level catalog entry.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:**
+  - `ScaffoldBundleInput` dataclass and `generate_gitops_bundle_files()` in `apps/portal/backend/app/scaffold_service.py` support `frontend-backend` and `frontend-backend-db` topologies
+  - Bundle generates shared namespace, per-component deployments/services/SAs, ingress routing to frontend, network policies (default-deny, allow-dns, allow-ingress, frontend↔backend, backend↔db), overlay patches per component per env
+  - `build_catalog_bundle_entries()` appends 2 catalog entries (frontend + backend) with shared `project_id`
+  - Backend schema (`api/schemas/scaffold.py`) extended with `topology`, `frontendTemplate`, `backendTemplate`, `dbTemplate` fields
+  - Frontend wizard (`scaffold-service-wizard.tsx`) adds topology step, `TopologyStep`, `BundleTemplateStep`, conditional config/validation
+  - 17 new bundle tests in `test_scaffold_service.py` covering file generation, DB topology, component labels, catalog entries, overlays, ServiceMonitor logic, and duplicate detection — all 341 tests pass
 - **Acceptance Criteria:**
   - Scaffold input supports a project topology such as `single-service`, `frontend-backend`, or `frontend-backend-db`.
   - Generated output creates one project namespace and multiple service manifests inside it without name collisions.
