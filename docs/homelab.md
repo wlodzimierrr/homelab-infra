@@ -2252,7 +2252,12 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T5.3.3 Update portal catalog and service views for project-first grouping
 - **Description:** Refactor the portal information architecture so projects are first-class containers that can show multiple services, while deployments and observability remain service-scoped.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:**
+  - Projects page now shows shared namespace per project (from catalog reconciliation join) and renders child services as clickable `AppLink` elements linking to `/services/{serviceId}`
+  - Services page adds a "Project" filter dropdown (`projectFilter` state + `projectOptions` derived from catalog join rows) alongside existing environment filter, filtering services by parent project membership via `projectByServiceKey` lookup
+  - Service detail page adds a "Project" context card below the status cards: links back to the owning project on the projects page, shows namespace, and lists sibling services as clickable links when the project has multiple services
+  - Backend/frontend contracts remain explicit: project context is derived from catalog reconciliation join data (`CatalogJoinRow`), not from service-level deployment or observability records; the `useServiceOverview` hook fetches `getCatalogReconciliation()` in parallel and exposes `projectContext` with `projectId`, `projectName`, `namespace`, and `siblingServiceIds`
 - **Acceptance Criteria:**
   - Projects page renders child services for each project and clearly shows shared namespace ownership.
   - Services page can filter or group by parent project.
