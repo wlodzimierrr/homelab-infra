@@ -2269,7 +2269,16 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T5.3.4 Add an adoption or migration path for already-deployed standalone services
 - **Description:** After the project-first path is working, add an operator-guided migration path for cases where a frontend and backend were originally created as separate standalone services and should later become one shared-namespace project.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:**
+  - Runbook `docs/runbooks/service-adoption-migration.md` documents two-phase migration: Phase 1 soft-link (metadata-only, `project_id` in `services.yaml`) and Phase 2 namespace consolidation (manifest rewrite + PR). Covers prerequisites, expected downtime, conflict types, execution, rollback, and post-migration validation.
+  - `POST /services/{service_id}/adopt` endpoint creates a PR to add `project_id` to an existing service's catalog entry (Phase 1 soft-link). Returns `noop` if already linked, `404` if service not found. Admin-only.
+  - `POST /migration/validate` endpoint performs pre-flight validation: checks ingress host conflicts (error), PVC scope (error), ArgoCD app conflicts (warning), secret scope (warning), and service discovery DNS references (warning). Pure read-only, no side effects.
+  - `POST /migration/consolidate` endpoint generates a PR that rewrites `metadata.namespace` in all base manifests, remaps file paths into the target project directory, updates `services.yaml` namespace and `project_id`, appends resources to target `kustomization.yaml`, and marks source ArgoCD Application files for deletion. Requires `acknowledgeConflicts: true` if validation found errors.
+  - `migration_validation.py` module with pure conflict detection functions: `check_ingress_conflicts`, `check_pvc_scope`, `check_secret_scope`, `check_service_discovery_references`, `check_argo_app_conflicts`
+  - `migration_consolidation.py` module with manifest transformation functions: `rewrite_namespace_in_manifest`, `remap_manifest_paths`, `update_services_yaml_project_id`, `update_services_yaml_namespace`, `build_kustomization_resource_additions`, `generate_consolidation_changes`
+  - Frontend: `AdoptServiceSection` component on service detail page (visible when service has no project context) with project ID input and PR link on success. `adoptService()` API client function in `api.ts`.
+  - 31 new tests across `test_migration_validation.py` (19 tests) and `test_migration_consolidation.py` (12 tests) — all 179 tests pass
 - **Acceptance Criteria:**
   - A runbook documents the safe migration path, expected downtime, naming changes, and rollback plan.
   - The portal/backend can link existing standalone services to a parent project before any namespace move happens.
