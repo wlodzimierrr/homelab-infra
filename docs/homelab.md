@@ -2174,7 +2174,18 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T5.2.4 Add scaffold support for "add service to existing project"
 - **Description:** Support a second self-service path that adds a new service into an existing project namespace instead of creating a fresh namespace every time.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:**
+  - `ScaffoldAddServiceInput` dataclass with `service_id` property in `apps/portal/backend/app/scaffold_service.py`
+  - `generate_gitops_add_service_files()` generates component deployment, service, serviceaccount, servicemonitor, and overlay patches without duplicating namespace, default-deny netpol, or ArgoCD Application
+  - `validate_add_service()` blocks duplicate `serviceId` and duplicate resource files in base kustomization
+  - `build_catalog_add_service_entry()` appends catalog entry with shared `project_id` and `argo_app`
+  - `update_overlay_kustomization_patches()` inserts new patch paths into existing overlay kustomizations
+  - Database template support (StatefulSet, Secret, Service) for add-to-project
+  - API schema extended with `mode`, `projectId`, `serviceName` fields; `GET /scaffold/projects` endpoint for project discovery
+  - `_generate_scaffold_files_and_updates` refactored to return `(new_files, modified_files)` tuple supporting all three modes
+  - Frontend wizard adds `mode` step with project picker dropdown, adapts `BasicInfoStep` for add-to-project (service name suffix + service ID preview), dynamic step navigation skipping topology for add-to-project
+  - 22 new tests covering file generation, DB template, component labels, overlay patches, validation, catalog entries, and overlay kustomization patching — all 363 tests pass
 - **Acceptance Criteria:**
   - Scaffold input can target an existing `projectId + env`.
   - New service generation reuses the existing namespace and project metadata instead of creating a duplicate project or namespace.
@@ -2223,7 +2234,13 @@ monitoring readiness so the dashboard reflects real operational state.
 
 #### T5.3.2 Refactor the portal new-service UX into a project-first creation flow
 - **Description:** Replace the current service-centric scaffold UX with a project-centric flow that lets the operator choose between `new single-service project`, `new frontend + backend project`, and `add service to existing project`.
-- **Status:** TODO
+- **Status:** DONE
+- **Evidence:**
+  - Wizard first step is now a `mode` selection: "New project" vs "Add service to existing project" (`ModeStep` in `scaffold-service-wizard.tsx`)
+  - "New project" flow shows topology step with "Frontend + Backend" option explicitly describing shared namespace: "Two services sharing one namespace. Generates a frontend and backend with inter-service network policies."
+  - Preview step now shows a summary banner with project name, namespace, child services, ingress host, and public host assumptions before the file list
+  - `validate_add_service()` blocks duplicate `serviceId` and resource file conflicts; `build_catalog_*` functions block duplicate catalog entries; `build_appproject_addition` blocks duplicate AppProject names
+  - `GET /scaffold/projects` endpoint provides project discovery with existing service IDs, enabling the frontend project picker to prevent targeting non-existent projects
 - **Acceptance Criteria:**
   - The first step in the UI asks whether the operator is creating a new project or adding a service to an existing project.
   - The `frontend + backend` option clearly shows that both services will share one namespace.
