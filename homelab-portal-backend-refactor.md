@@ -174,11 +174,12 @@ Client-based auth/admin API tests are still blocked by the same sandbox/runtime 
 
 ---
 
-## Phase 6: Cleanup main.py
+## Phase 6: Cleanup main.py — PARTIAL
 
 **ID:** R6
 **Priority:** Low
 **Risk:** Low
+**Actual lines moved:** ~115 (main.py 3,603 → 3,488)
 
 ### Description
 
@@ -191,9 +192,28 @@ After phases 1-5, `main.py` should be ~1,400 lines containing app setup, middlew
 ### Acceptance Criteria
 
 - [ ] `main.py` contains only app initialization, middleware config, lifespan handlers, and shared utilities
-- [ ] No endpoint handler functions remain in `main.py`
+- [x] No endpoint handler functions remain in `main.py`
 - [ ] All tests pass
 - [ ] `main.py` is under 600 lines
+
+### Notes
+
+This pass extracted the final public route handlers (`/health` and `/metrics`) into `app/api/endpoints/system.py`, updated `app/api/routes/system.py`, and removed the corresponding handler definitions from `main.py`.
+
+It also cleaned up a large batch of dead imports from `main.py`. Some schema imports remain intentionally even though static lint sees them as unused, because the split route modules still resolve response models through `main_module.<SchemaName>` during route registration.
+
+Verified locally:
+
+- `py_compile` on the touched `main.py` and system endpoint files
+- `tests/test_api_route_boundaries.py`
+- `tests/test_catalog_sync_scheduler.py`
+- `tests/test_package_validation.py`
+
+Status after this pass:
+
+- `main.py` no longer contains public endpoint handlers
+- `main.py` is still much larger than the target because the deployment/catalog/observability helper clusters and composition callbacks still live there
+- Full API test coverage remains blocked by the existing `TestClient`/AnyIO thread-interop hang in this sandbox
 
 ---
 
