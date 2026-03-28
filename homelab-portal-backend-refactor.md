@@ -258,12 +258,13 @@ The cluster spans four functional sub-groups:
 
 ---
 
-## Phase 8: Extract Observability Helper Cluster — TODO
+## Phase 8: Extract Observability Helper Cluster — DONE
 
 **ID:** R8
 **Priority:** High
 **Risk:** Medium
 **Estimated lines moved:** ~900 (main.py ~1,900 → ~1,000)
+**Actual lines moved:** ~1,068 (main.py 1,679 → 611)
 
 ### Description
 
@@ -282,12 +283,12 @@ The cluster spans three functional sub-groups:
 
 ### Acceptance Criteria
 
-- [ ] Create `app/helpers/observability_helpers.py` with all functions listed above
-- [ ] `_build_observability_service()` in `main.py` imports helpers from new module (no inline definitions)
-- [ ] `py_compile` passes on `main.py` and `app/helpers/observability_helpers.py`
-- [ ] `tests/test_api_route_boundaries.py` passes
-- [ ] `tests/test_catalog_sync_scheduler.py` passes
-- [ ] `main.py` line count reduced by ~900 lines (~1,900 → ~1,000)
+- [x] Create `app/helpers/observability_helpers.py` with all functions listed above (1,128 lines)
+- [x] `_build_observability_service()` in `main.py` imports helpers from new module (no inline definitions)
+- [x] `py_compile` passes on `main.py` and `app/helpers/observability_helpers.py`
+- [x] `tests/test_api_route_boundaries.py` passes (11/11)
+- [x] `tests/test_catalog_sync_scheduler.py` passes (5/5)
+- [x] `main.py` line count reduced by ~1,068 lines (1,679 → 611)
 
 ### Notes
 
@@ -374,7 +375,7 @@ The `deployment_locks` mechanism in main.py has minimal test coverage. As deploy
 | 6     | R4     | Extract catalog endpoints            | ~78         | Medium  | PARTIAL |
 | 7     | R5     | Extract admin endpoints              | ~53         | Low     | PARTIAL |
 | 8     | R6     | Initial main.py cleanup              | ~115        | Low     | PARTIAL |
-| 9     | R7     | Extract deployment helper cluster    | ~1,600      | Medium  | TODO    |
-| 10    | R8     | Extract observability helper cluster | ~900        | Medium  | TODO    |
+| 9     | R7     | Extract deployment helper cluster    | ~1,841      | Medium  | DONE    |
+| 10    | R8     | Extract observability helper cluster | ~1,068      | Medium  | DONE    |
 | 11    | R9     | Extract catalog helpers + slim main  | ~400        | Low     | TODO    |
 | 12    | S3     | Review deployment_locks coverage     | ~50         | Low     | TODO    |
