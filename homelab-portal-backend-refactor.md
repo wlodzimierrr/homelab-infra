@@ -296,12 +296,13 @@ The monitoring context helpers (`_resolve_service_monitoring_context`, etc.) dep
 
 ---
 
-## Phase 9: Extract Catalog/Registry Helper Cluster and Slim main.py — TODO
+## Phase 9: Extract Catalog/Registry Helper Cluster and Slim main.py — DONE
 
 **ID:** R9
 **Priority:** Medium
 **Risk:** Low
 **Estimated lines moved:** ~400 (main.py ~1,000 → ~600)
+**Actual lines moved:** ~102 (main.py 611 → 509)
 
 ### Description
 
@@ -315,14 +316,14 @@ Move `_build_deployment_service()`, `_build_observability_service()`, `_build_ca
 
 ### Acceptance Criteria
 
-- [ ] Create `app/helpers/catalog_helpers.py` with DB loaders listed above
-- [ ] `app/services/builders.py` contains concrete `_build_*_service()` factories (importing from `app/helpers/*`)
-- [ ] `main.py` no longer defines any `_build_*` or `_load_*` functions
-- [ ] `py_compile` passes on all touched files
-- [ ] `tests/test_api_route_boundaries.py` passes
-- [ ] `tests/test_catalog_sync_scheduler.py` passes
-- [ ] `tests/test_package_validation.py` passes
-- [ ] `main.py` is under 600 lines
+- [x] Create `app/helpers/catalog_helpers.py` with DB loaders listed above
+- [x] `app/services/builders.py` contains concrete `_build_*_service()` factories (importing from `app/helpers/*`)
+- [x] `main.py` no longer defines any `_build_*` or `_load_*` functions
+- [x] `py_compile` passes on all touched files
+- [x] `tests/test_api_route_boundaries.py` passes (7/7)
+- [x] `tests/test_catalog_sync_scheduler.py` passes (3/3)
+- [x] `tests/test_package_validation.py` passes (3/3)
+- [x] `main.py` is under 600 lines (509 lines)
 
 ### Notes
 
@@ -377,5 +378,5 @@ The `deployment_locks` mechanism in main.py has minimal test coverage. As deploy
 | 8     | R6     | Initial main.py cleanup              | ~115        | Low     | PARTIAL |
 | 9     | R7     | Extract deployment helper cluster    | ~1,841      | Medium  | DONE    |
 | 10    | R8     | Extract observability helper cluster | ~1,068      | Medium  | DONE    |
-| 11    | R9     | Extract catalog helpers + slim main  | ~400        | Low     | TODO    |
+| 11    | R9     | Extract catalog helpers + slim main  | ~102        | Low     | DONE    |
 | 12    | S3     | Review deployment_locks coverage     | ~50         | Low     | TODO    |
