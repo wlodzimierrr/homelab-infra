@@ -217,6 +217,118 @@ Status after this pass:
 
 ---
 
+## Phase 7: Extract Deployment Helper Cluster — DONE
+
+**ID:** R7
+**Priority:** High
+**Risk:** Medium
+**Estimated lines moved:** ~1,600 (main.py 3,520 → ~1,900)
+
+### Description
+
+Move the deployment-domain private helpers out of `main.py` into `app/helpers/deployment_helpers.py`. These functions are injected as deps into `DeploymentService` and `CatalogService` via the `*ServiceDeps` pattern — the move changes where they're defined, not how they're wired. After this phase, `_build_deployment_service()` and `_build_catalog_service()` in `main.py` become one-line imports rather than giant inline closures.
+
+The cluster spans four functional sub-groups:
+
+**DB / record helpers** (lines 247–403):
+`_with_connection`, `_list_deployment_records_for_service`, `_get_deployment_record_by_id`, `_get_active_deployment_lock`, `_upsert_deployment_record_row`, `_reconcile_recent_deployment_activity`, `_maybe_reconcile_recent_deployments`
+
+**GitHub / GHCR / GitOps helpers** (lines 687–1398):
+`_extract_version_from_image_ref`, `_github_api_json`, `_build_service_image_ref`, `_build_prod_service_image_ref`, `_extract_sha_from_tag`, `_build_compare_url_for_portal_tags`, `_build_commit_url`, `_parse_ghcr_image_repo`, `_build_package_url_from_image_ref`, `_extract_image_digest`, `_deployment_record_timestamp`, `_select_latest_deployment_info_record`, `_github_package_version_paths`, `_package_version_has_tag`, `_ensure_ghcr_tag_exists`, `_safe_branch_fragment`, `_build_dev_deploy_branch_name`, `_build_prod_promote_branch_name`, `_build_service_rollback_branch_name`, `_extract_image_ref_from_overlay`, `_replace_image_ref_in_overlay`, `_resolve_latest_portal_image_candidate`, `_load_dev_overlay_update_plan`, `_load_promote_to_prod_update_plan`, `_load_service_rollback_update_plan`, `_list_service_rollback_candidates`, `_build_dev_deploy_pr_body`, `_build_promote_to_prod_pr_body`, `_build_service_rollback_pr_body`, `_build_secret_edit_branch_name`, `_build_config_edit_branch_name`, `_build_config_edit_pr_body`, `_build_secret_edit_pr_body`, `_select_preferred_service_row`
+
+**Live runtime / Argo helpers** (lines 1399–1897):
+`_normalize_live_sync_status`, `_normalize_live_health_status`, `_release_row_has_meaningful_metadata`, `_coalesce_service_status`, `_list_live_deployments_for_service`, `_load_live_argo_status_for_service`, `_extract_live_deployment_image_ref`, `_extract_live_deployment_health`, `_extract_live_deployment_timestamp`, `_load_live_service_runtime_rows`, `_load_release_rows_for_service`, `_sort_release_rows_by_deployed_at`, `_coalesce_release_string`, `_enrich_release_row_with_live_runtime`, `_enrich_release_rows_with_live_runtime`
+
+**Deployment record response builders** (lines 1898–2323):
+`_registry_stale_after_minutes`, `_registry_warning_after_minutes`, `_deployment_history_cache_ttl_seconds`, `_deployment_comparison_window_token`, `_parse_iso_datetime`, `_build_metric_snapshot`, `_format_duration_token`, `_resolve_window_end`, `_expand_observability_query_window`, `_resolve_record_window`, `_query_prometheus_comparison_snapshot`, `_load_metric_snapshots_for_window`, `_load_deployment_metric_snapshots`, `_persist_observability_snapshot_safe`, `_deployment_record_sort_timestamp`, `_build_deployment_record_response`, `_build_deployment_lock_response`
+
+### Acceptance Criteria
+
+- [x] Create `app/helpers/deployment_helpers.py` with all functions listed above
+- [x] `_build_deployment_service()` in `main.py` imports helpers from new module (no inline definitions)
+- [x] `_build_catalog_service()` in `main.py` imports shared helpers from new module where used
+- [x] `py_compile` passes on `main.py` and `app/helpers/deployment_helpers.py`
+- [x] `tests/test_api_route_boundaries.py` passes
+- [x] `tests/test_deployment_locks.py` passes
+- [x] `main.py` line count reduced by ~1,600 lines (3,520 → 1,679, −1,841 lines)
+
+### Notes
+
+`PortalDeployToDevError`, `PortalPromoteToProdError`, `PortalServiceRollbackError` (lines 226–242) should move alongside this cluster since they're used only by deployment helpers and `DeploymentService`. Keep `clear_observability_caches_for_tests()` in `main.py` — it's a test seam for the module-level cache objects.
+
+---
+
+## Phase 8: Extract Observability Helper Cluster — TODO
+
+**ID:** R8
+**Priority:** High
+**Risk:** Medium
+**Estimated lines moved:** ~900 (main.py ~1,900 → ~1,000)
+
+### Description
+
+Move the observability-domain private helpers out of `main.py` into `app/helpers/observability_helpers.py`. These functions are injected into `ObservabilityService` via `ObservabilityServiceDeps`. After this phase `_build_observability_service()` in `main.py` becomes an import + single compose call.
+
+The cluster spans three functional sub-groups:
+
+**Monitoring context resolution** (lines 557–686):
+`_resolve_service_monitoring_context`, `_resolve_service_monitoring_metadata`, `_build_service_metrics_probe_queries`, `_query_prometheus_series_present`, `_build_metrics_observability_diagnostics`
+
+**Prometheus / Loki / Alertmanager query wrappers** (lines 2373–2625):
+`_query_prometheus_scalar`, `_query_prometheus_range`, `_query_loki_range`, `_query_alertmanager_active_alerts`, `_validate_selected_range`, `_effective_limit`
+
+**Metric / timeline / logs response builders** (lines 2626–3378):
+`_build_service_metrics_queries`, `_serialize_metric_trend_points`, `_build_metric_trend_series`, `_build_health_timeline_queries`, `_validate_step_for_range`, `_serialize_metric_snapshot`, `_select_timeline_step_seconds`, `_resolve_deployment_observability_context`, `_build_no_window_metrics_response`, `_build_no_window_timeline_response`, `_build_no_window_logs_response`, `_extract_provider_failure`, `_build_provider_error_metrics_response`, `_build_provider_error_timeline_response`, `_build_provider_error_logs_response`, `_build_deployment_metrics_response`, `_build_deployment_timeline_response`, `_build_deployment_logs_response`
+
+### Acceptance Criteria
+
+- [ ] Create `app/helpers/observability_helpers.py` with all functions listed above
+- [ ] `_build_observability_service()` in `main.py` imports helpers from new module (no inline definitions)
+- [ ] `py_compile` passes on `main.py` and `app/helpers/observability_helpers.py`
+- [ ] `tests/test_api_route_boundaries.py` passes
+- [ ] `tests/test_catalog_sync_scheduler.py` passes
+- [ ] `main.py` line count reduced by ~900 lines (~1,900 → ~1,000)
+
+### Notes
+
+The monitoring context helpers (`_resolve_service_monitoring_context`, etc.) depend on catalog DB helpers from R7's `deployment_helpers.py` — import them from there rather than duplicating. The `logger` instance used throughout this cluster should be passed as a parameter or imported from a shared logging setup rather than captured from `main.py`'s module-level `logger`.
+
+---
+
+## Phase 9: Extract Catalog/Registry Helper Cluster and Slim main.py — TODO
+
+**ID:** R9
+**Priority:** Medium
+**Risk:** Low
+**Estimated lines moved:** ~400 (main.py ~1,000 → ~600)
+
+### Description
+
+Move the catalog/registry DB row loaders out of `main.py` into `app/helpers/catalog_helpers.py`, then collapse all four `_build_*_service()` factory functions into `app/services/builders.py` so `main.py` only calls `configure_backend_services()`. After this phase `main.py` should contain only: imports, app init, cache setup, lifespan/middleware, `configure_backend_services()`, `_register_api_routes()`, and the test-seam helpers.
+
+**Catalog / registry DB loaders** (lines 405–554):
+`_load_project_rows`, `_load_project_catalog_rows`, `_project_catalog_index`, `_load_service_rows`, `_load_service_catalog_rows`
+
+**Service builder collapse** (lines 2324–3520):
+Move `_build_deployment_service()`, `_build_observability_service()`, `_build_catalog_service()`, `_build_scaffold_admin_service()` into `app/services/builders.py` as concrete factory functions that import from `app/helpers/*`. `main.py` becomes: `from app.services.builders import build_all_services; configure_backend_services(build_all_services())`.
+
+### Acceptance Criteria
+
+- [ ] Create `app/helpers/catalog_helpers.py` with DB loaders listed above
+- [ ] `app/services/builders.py` contains concrete `_build_*_service()` factories (importing from `app/helpers/*`)
+- [ ] `main.py` no longer defines any `_build_*` or `_load_*` functions
+- [ ] `py_compile` passes on all touched files
+- [ ] `tests/test_api_route_boundaries.py` passes
+- [ ] `tests/test_catalog_sync_scheduler.py` passes
+- [ ] `tests/test_package_validation.py` passes
+- [ ] `main.py` is under 600 lines
+
+### Notes
+
+The `app/helpers/` package needs an `__init__.py`. The `_with_connection()` helper (used by both deployment and catalog helpers) should live in `app/helpers/db.py` and be imported by both, rather than duplicated. The re-exported schema imports (lines 102–166 in current `main.py`) can be removed once all route modules import schemas directly from `app.api.schemas.*` — audit route files before removing.
+
+---
+
 ## Secondary Issues
 
 ### S1: Fix Missing prometheus_client Import
@@ -252,14 +364,17 @@ The `deployment_locks` mechanism in main.py has minimal test coverage. As deploy
 
 ## Execution Order
 
-| Order | Ticket | Lines | Risk   |
-|-------|--------|-------|--------|
-| 1     | S1     | ~1    | Trivial|
-| 2     | S2     | ~10   | Low    |
-| 3     | R1     | ~800  | Low    |
-| 4     | R2     | ~600  | Low    |
-| 5     | R3     | ~500  | Low    |
-| 6     | R4     | ~700  | Medium |
-| 7     | R5     | ~400  | Low    |
-| 8     | R6     | —     | Low    |
-| 9     | S3     | ~50   | Low    |
+| Order | Ticket | Description                          | Lines moved | Risk    | Status  |
+|-------|--------|--------------------------------------|-------------|---------|---------|
+| 1     | S1     | Fix prometheus_client import         | ~1          | Trivial | DONE    |
+| 2     | S2     | Fix stale monkeypatches              | ~10         | Low     | DONE    |
+| 3     | R1     | Extract scaffold endpoints           | ~451        | Low     | DONE    |
+| 4     | R2     | Extract deployment endpoints         | ~124        | Low     | DONE    |
+| 5     | R3     | Extract observability endpoints      | ~171        | Low     | DONE    |
+| 6     | R4     | Extract catalog endpoints            | ~78         | Medium  | PARTIAL |
+| 7     | R5     | Extract admin endpoints              | ~53         | Low     | PARTIAL |
+| 8     | R6     | Initial main.py cleanup              | ~115        | Low     | PARTIAL |
+| 9     | R7     | Extract deployment helper cluster    | ~1,600      | Medium  | TODO    |
+| 10    | R8     | Extract observability helper cluster | ~900        | Medium  | TODO    |
+| 11    | R9     | Extract catalog helpers + slim main  | ~400        | Low     | TODO    |
+| 12    | S3     | Review deployment_locks coverage     | ~50         | Low     | TODO    |
