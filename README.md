@@ -15,6 +15,37 @@ This is a **complete DevOps platform** combining:
 
 ---
 
+## Hardware & Infrastructure
+
+### Physical Cluster
+- **3× Dell OptiPlex Mini PC** (primary Kubernetes nodes)
+  - CPU: Intel Core i5-8500T (6-core, 3.1 GHz)
+  - RAM: 32 GB DDR4
+  - Storage: 256 GB NVMe SSD
+  - Topology: 3 control plane nodes (HA)
+
+### Network Architecture
+- **Router**: Mac mini + OPNsense
+  - Separates home network from cluster network via VLANs
+  - DHCP, DNS, firewall, routing
+- **Switch**: TP-Link TL-SG 108E (8-port Gigabit)
+  - VLAN-capable managed switch
+  - Connects cluster nodes, router, and Hetzner gateway
+
+### Cloud Edge
+- **Hetzner Cloud CX23** (public ingress & gateway)
+  - CPU: 2× vCPU (shared)
+  - RAM: 4 GB
+  - Storage: 40 GB NVMe SSD
+  - Internet-facing edge for 80/443 DNAT → cluster
+  - WireGuard VPN endpoint (10.100.0.0/24 overlay)
+  - Managed via Terraform
+  - Cost-efficient public ingress for HA cluster
+
+**Network Flow**: Internet → Hetzner gateway (DNAT) → WireGuard tunnel → OPNsense router (VLAN isolation) → TP-Link switch → Dell cluster nodes
+
+---
+
 ## Related Repositories
 
 | Repository | Purpose | Status |
@@ -233,15 +264,3 @@ Metrics + logs streamed to observability stack
 2. **New service?** Add to [workloads/services.yaml](workloads/services.yaml), create Kustomize base + overlays
 3. **New portal feature?** Implement in FastAPI backend [apps/portal/backend/](apps/portal/backend/), update frontend [apps/portal/frontend/](apps/portal/frontend/)
 4. **Architecture decision?** Create ADR in [docs/adr/](docs/adr/) using [template](docs/adr/_template.md)
-
----
-
-## Author
-
-**Wlodzimierz (wlodzimierrr)** — Solo infrastructure operator, platform engineer, DevOps practitioner
-
----
-
-## License
-
-[MIT](LICENSE) (or specify your license)
